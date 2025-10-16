@@ -1,0 +1,15 @@
+{
+  "name": "repair-shop-master",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack repair shop management system",
+  "scripts": {
+    "install-all": "cd repair-shop-admin && npm install && cd ../repair-shop-customer && npm install"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BernieAL/repair-shop-master.git"
+  },
+  "author": "",
+  "license": "ISC"
+}
