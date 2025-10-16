@@ -1,0 +1,31 @@
+# If you're treating the parent folder as a monorepo
+
+# Node modules in both apps
+repair-shop-admin/node_modules/
+repair-shop-customer/node_modules/
+
+# Build folders
+repair-shop-admin/build/
+repair-shop-customer/build/
+
+# Environment variables
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Logs
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Cache
+**/.cache
+**/node_modules/.cache
