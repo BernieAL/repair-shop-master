@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import {
   Person, Email, Phone, ExitToApp, Help, Info,
+  Settings, CardGiftcard,  // ← Add these imports
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -67,6 +68,37 @@ const Profile = () => {
           </List>
         </CardContent>
       </Card>
+
+      {/* ✅ ADD THESE BUTTONS HERE */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<Settings />}
+          onClick={() => {
+            if (navigator.vibrate) navigator.vibrate(30);
+            navigate('/account');
+          }}
+          size="large"
+          sx={{ minHeight: 56 }}
+        >
+          Account Settings
+        </Button>
+
+        <Button
+          fullWidth
+          variant="outlined"
+          startIcon={<CardGiftcard />}
+          onClick={() => {
+            if (navigator.vibrate) navigator.vibrate(30);
+            navigate('/referrals');
+          }}
+          size="large"
+          sx={{ minHeight: 56 }}
+        >
+          Referrals & Credits
+        </Button>
+      </Box>
 
       {/* Quick Links */}
       <Card sx={{ mb: 3 }} elevation={isMobile ? 2 : 3}>
