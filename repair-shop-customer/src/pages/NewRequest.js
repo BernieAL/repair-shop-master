@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect} from 'react';
 import {
   Container, Typography, Box, Card, CardContent, TextField,
   Button, Alert, MenuItem, FormControl, InputLabel, Select,
@@ -12,10 +12,10 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { customerAPI } from '../services/api';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const NewRequest = () => {
-  const { user } = useContext(AuthContext);
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();

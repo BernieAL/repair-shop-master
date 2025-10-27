@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect} from 'react';
 import {
   Container, Typography, Box, Card, CardContent, Grid, Chip,
   Button, Dialog, DialogTitle, DialogContent, Divider, Alert,
@@ -13,10 +13,10 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { customerAPI } from '../services/api';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const MyRepairs = () => {
-  const { user } = useContext(AuthContext);
+  const { user } = useAuth();  // ✅ This line
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));

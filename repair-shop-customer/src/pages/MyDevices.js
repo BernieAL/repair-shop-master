@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect} from 'react';
 import {
   Container, Typography, Box, Card, CardContent, Grid, Button,
   Fab, IconButton, Chip, Alert, Dialog, Slide, TextField,
@@ -10,14 +10,14 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { customerAPI } from '../services/api';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
 });
 
 const MyDevices = () => {
-  const { user } = useContext(AuthContext);
+  const { user } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -64,43 +64,43 @@ const MyDevices = () => {
   };
 
   const handleAddDevice = async () => {
-    try {
-      setSubmitting(true);
-      setError('');
-      
-      // Backend automatically sets customer_id from JWT token
-      const deviceData = {
-        device_type: newDevice.device_type,
-        brand: newDevice.brand,
-        model: newDevice.model,
-        serial_number: newDevice.serial_number || null,
-      };
+  try {
+    setSubmitting(true);
+    setError('');
+    
+    // Backend automatically sets customer_id from JWT token
+    const deviceData = {
+      device_type: newDevice.device_type,
+      brand: newDevice.brand,
+      model: newDevice.model,
+      serial_number: newDevice.serial_number || null,
+    };
 
-      const response = await api.post('/api/devices', deviceData);
-      
-      // Optimistic UI update - add immediately
-      setDevices([response.data, ...devices]);
-      
-      // Haptic feedback
-      if (navigator.vibrate) navigator.vibrate([50, 100, 50]);
-      
-      setOpenAddDevice(false);
-      setNewDevice({
-        device_type: 'phone',
-        brand: '',
-        model: '',
-        serial_number: '',
-      });
-      
-      setSuccessMessage('Device added successfully!');
-    } catch (err) {
-      console.error('Error adding device:', err);
-      setError(err.response?.data?.detail || 'Failed to add device. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
+    // ✅ FIXED: Use customerAPI instead of api
+    const response = await customerAPI.createMyDevice(deviceData);
+    
+    // Optimistic UI update - add immediately
+    setDevices([response.data, ...devices]);
+    
+    // Haptic feedback
+    if (navigator.vibrate) navigator.vibrate([50, 100, 50]);
+    
+    setOpenAddDevice(false);
+    setNewDevice({
+      device_type: 'phone',
+      brand: '',
+      model: '',
+      serial_number: '',
+    });
+    
+    setSuccessMessage('Device added successfully!');
+  } catch (err) {
+    console.error('Error adding device:', err);
+    setError(err.response?.data?.detail || 'Failed to add device. Please try again.');
+  } finally {
+    setSubmitting(false);
+  }
+};
   const getDeviceIcon = (type) => {
     const iconStyle = { fontSize: isMobile ? 48 : 40, color: 'primary.main' };
     switch (type.toLowerCase()) {
