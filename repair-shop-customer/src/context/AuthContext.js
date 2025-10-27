@@ -3,47 +3,51 @@ import { authAPI } from '../services/api';
 
 const AuthContext = createContext(null);
 
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
 
-  // Check if user is already logged in on mount
   useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const response = await authAPI.getCurrentUser();
-          setUser(response.data);
-        } catch (err) {
-          console.error('Auth check failed:', err);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-        }
-      }
-      setLoading(false);
-    };
-
     checkAuth();
   }, []);
 
+  const checkAuth = async () => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const response = await authAPI.getCurrentUser();
+        setUser(response.data);
+      } catch (err) {
+        console.error('Auth check failed:', err);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    }
+    setLoading(false);
+  };
+
   const login = async (email, password) => {
     try {
-      setError(null);
+      setError('');
       const response = await authAPI.login(email, password);
-      const { access_token } = response.data;
-      
-      // Store token
+      const { access_token, user: userData } = response.data;
+
       localStorage.setItem('token', access_token);
-      
-      // Get user info
-      const userResponse = await authAPI.getCurrentUser();
-      setUser(userResponse.data);
-      
-      return { success: true };
+      localStorage.setItem('user', JSON.stringify(userData));
+      setUser(userData);
+
+      return { success: true, user: userData };
     } catch (err) {
-      const errorMessage = err.response?.data?.detail || 'Login failed. Please try again.';
+      const errorMessage = err.response?.data?.detail || 'Login failed';
       setError(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -51,20 +55,11 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (name, email, phone, password) => {
     try {
-      setError(null);
-      const response = await authAPI.register(name, email, phone, password);
-      const { access_token } = response.data;
-      
-      // Store token
-      localStorage.setItem('token', access_token);
-      
-      // Get user info
-      const userResponse = await authAPI.getCurrentUser();
-      setUser(userResponse.data);
-      
-      return { success: true };
+      setError('');
+      await authAPI.register(name, email, phone, password);
+      return await login(email, password);
     } catch (err) {
-      const errorMessage = err.response?.data?.detail || 'Registration failed. Please try again.';
+      const errorMessage = err.response?.data?.detail || 'Registration failed';
       setError(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -78,21 +73,12 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
-    login,
-    logout,
-    register,
     loading,
     error,
-    isAuthenticated: !!user,
+    login,
+    register,
+    logout,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };

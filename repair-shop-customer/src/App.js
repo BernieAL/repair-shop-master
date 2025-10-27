@@ -1,102 +1,101 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import Layout from './components/Layout';
+import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
+import { AuthProvider } from './context/AuthContext';
+
+// Components
+import BottomNav from './components/BottomNav';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import MyDevices from './pages/MyDevices';
+import MyRepairs from './pages/MyRepairs';
+import NewRequest from './pages/NewRequest';
+import Profile from './pages/Profile';
+import FAQ from './pages/FAQ';
 
-// Protected Route wrapper - MUST be inside AuthProvider
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#667eea',
+      light: '#7c8ef0',
+      dark: '#5568d3',
+    },
+    secondary: {
+      main: '#764ba2',
+    },
+    background: {
+      default: '#f5f7fa',
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    button: {
+      textTransform: 'none',
+      fontWeight: 600,
+    },
+  },
+  shape: {
+    borderRadius: 12,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 12,
+          padding: '10px 24px',
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: 16,
+        },
+      },
+    },
+  },
+});
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl text-gray-600">Loading...</div>
-      </div>
-    );
-  }
-
-  return isAuthenticated ? children : <Navigate to="/login" />;
-};
-
-// AppRoutes component - uses useAuth, so must be inside AuthProvider
-const AppRoutes = () => {
-  return (
-    <Router>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-
-        {/* Protected routes */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/my-devices"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <div className="text-center py-12">
-                  <h2 className="text-2xl font-bold">My Devices</h2>
-                  <p className="text-gray-600 mt-2">Coming soon...</p>
-                </div>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/my-repairs"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <div className="text-center py-12">
-                  <h2 className="text-2xl font-bold">My Repairs</h2>
-                  <p className="text-gray-600 mt-2">Coming soon...</p>
-                </div>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/new-request"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <div className="text-center py-12">
-                  <h2 className="text-2xl font-bold">New Repair Request</h2>
-                  <p className="text-gray-600 mt-2">Coming soon...</p>
-                </div>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Catch all */}
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Router>
-  );
-};
-
-// Main App component - wraps everything with AuthProvider
 function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AuthProvider>
+        <Router>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+
+            {/* Protected Routes */}
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <Box sx={{ pb: { xs: 9, md: 0 } }}>
+                    <Routes>
+                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/my-devices" element={<MyDevices />} />
+                      <Route path="/my-repairs" element={<MyRepairs />} />
+                      <Route path="/new-request" element={<NewRequest />} />
+                      <Route path="/profile" element={<Profile />} />
+                      <Route path="/faq" element={<FAQ />} />
+                    </Routes>
+                  </Box>
+                  <BottomNav />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
