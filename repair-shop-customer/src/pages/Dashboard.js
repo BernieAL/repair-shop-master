@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import {
+  Container, Typography, Box, Grid, Card, CardContent, Button,
+  Skeleton, useTheme, useMediaQuery, Chip, IconButton, Divider,
+  List, ListItem, ListItemText, ListItemIcon,
+} from '@mui/material';
+import {
+  Devices, Build, CheckCircle, Add, TrendingUp,
+  Refresh as RefreshIcon, ArrowForward,
+} from '@mui/icons-material';
 import { customerAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [stats, setStats] = useState({
     devices: 0,
     activeRepairs: 0,
@@ -12,176 +25,338 @@ const Dashboard = () => {
   });
   const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (isRefresh = false) => {
     try {
-      setLoading(true);
-      // For now, mock data since backend isn't ready
-      // TODO: Replace with real API calls
-      const mockDevices = [
-        { id: 1, brand: 'Apple', model: 'MacBook Pro' },
-        { id: 2, brand: 'Dell', model: 'XPS 15' },
-      ];
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
 
-      const mockOrders = [
-        {
-          id: 1,
-          device: 'MacBook Pro',
-          status: 'in-progress',
-          description: 'Screen replacement',
-          created_at: '2025-10-15',
-        },
-        {
-          id: 2,
-          device: 'Dell XPS 15',
-          status: 'completed',
-          description: 'Battery replacement',
-          created_at: '2025-10-10',
-        },
-      ];
+      // Fetch real data from backend
+      const [devicesRes, workOrdersRes] = await Promise.all([
+        customerAPI.getMyDevices(),
+        customerAPI.getMyWorkOrders(),
+      ]);
+
+      const devices = devicesRes.data;
+      const workOrders = workOrdersRes.data;
 
       setStats({
-        devices: mockDevices.length,
-        activeRepairs: mockOrders.filter((o) => o.status !== 'completed').length,
-        completedRepairs: mockOrders.filter((o) => o.status === 'completed').length,
+        devices: devices.length,
+        activeRepairs: workOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length,
+        completedRepairs: workOrders.filter(o => o.status === 'completed').length,
       });
-      setRecentOrders(mockOrders);
+
+      // Get 3 most recent orders
+      const sorted = workOrders.sort((a, b) => 
+        new Date(b.created_at) - new Date(a.created_at)
+      ).slice(0, 3);
+      
+      setRecentOrders(sorted);
+
+      if (isRefresh && navigator.vibrate) {
+        navigator.vibrate(50);
+      }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const getStatusColor = (status) => {
-    const colors = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      'in-progress': 'bg-blue-100 text-blue-800',
-      completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
+    switch (status?.toLowerCase()) {
+      case 'pending': return 'warning';
+      case 'in_progress': return 'info';
+      case 'completed': return 'success';
+      case 'cancelled': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const formatStatus = (status) => {
+    return status?.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ') || 'Unknown';
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-xl text-gray-600">Loading...</div>
-      </div>
+      <Container maxWidth="lg" sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 2 : 3 }}>
+        <Skeleton variant="text" width="60%" height={40} sx={{ mb: 1 }} />
+        <Skeleton variant="text" width="40%" height={24} sx={{ mb: 3 }} />
+        <Grid container spacing={2}>
+          {[1, 2, 3].map(i => (
+            <Grid item xs={12} sm={4} key={i}>
+              <Skeleton variant="rounded" height={120} />
+            </Grid>
+          ))}
+        </Grid>
+      </Container>
     );
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Welcome back, {user?.name}!</h1>
-        <p className="text-gray-600 mt-1">Here's what's happening with your devices</p>
-      </div>
+    <Container 
+      maxWidth="lg" 
+      sx={{ 
+        mt: isMobile ? 1 : 4, 
+        mb: isMobile ? 10 : 4,
+        px: isMobile ? 1.5 : 3,
+      }}
+    >
+      {/* Header */}
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box>
+          <Typography variant={isMobile ? 'h5' : 'h4'} fontWeight="700">
+            Welcome back, {user?.name?.split(' ')[0]}! 👋
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Here's what's happening with your devices
+          </Typography>
+        </Box>
+        <IconButton onClick={() => fetchDashboardData(true)} disabled={refreshing}>
+          <RefreshIcon sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+        </IconButton>
+      </Box>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Link to="/my-devices" className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">My Devices</p>
-              <p className="text-3xl font-bold text-purple-600">{stats.devices}</p>
-            </div>
-            <div className="bg-purple-100 rounded-full p-3">
-              <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-          </div>
-        </Link>
+      <Grid container spacing={isMobile ? 1.5 : 3} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={4}>
+          <Card
+            onClick={() => navigate('/my-devices')}
+            sx={{
+              cursor: 'pointer',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+              '&:active': { transform: 'scale(0.98)' },
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+            }}
+            elevation={isMobile ? 2 : 3}
+          >
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <Box>
+                  <Typography variant="body2" sx={{ opacity: 0.9, mb: 1 }}>
+                    My Devices
+                  </Typography>
+                  <Typography variant="h3" fontWeight="700">
+                    {stats.devices}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    bgcolor: 'rgba(255,255,255,0.2)',
+                    borderRadius: 2,
+                    p: 1,
+                  }}
+                >
+                  <Devices sx={{ fontSize: 32 }} />
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
 
-        <Link to="/my-repairs" className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Active Repairs</p>
-              <p className="text-3xl font-bold text-blue-600">{stats.activeRepairs}</p>
-            </div>
-            <div className="bg-blue-100 rounded-full p-3">
-              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </Link>
+        <Grid item xs={12} sm={4}>
+          <Card
+            onClick={() => navigate('/my-repairs')}
+            sx={{
+              cursor: 'pointer',
+              transition: 'transform 0.2s',
+              '&:active': { transform: 'scale(0.98)' },
+            }}
+            elevation={isMobile ? 2 : 3}
+          >
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Active Repairs
+                  </Typography>
+                  <Typography variant="h3" fontWeight="700" color="info.main">
+                    {stats.activeRepairs}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    bgcolor: 'info.light',
+                    borderRadius: 2,
+                    p: 1,
+                  }}
+                >
+                  <Build sx={{ fontSize: 32, color: 'info.main' }} />
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Completed</p>
-              <p className="text-3xl font-bold text-green-600">{stats.completedRepairs}</p>
-            </div>
-            <div className="bg-green-100 rounded-full p-3">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </div>
+        <Grid item xs={12} sm={4}>
+          <Card elevation={isMobile ? 2 : 3}>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Completed
+                  </Typography>
+                  <Typography variant="h3" fontWeight="700" color="success.main">
+                    {stats.completedRepairs}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    bgcolor: 'success.light',
+                    borderRadius: 2,
+                    p: 1,
+                  }}
+                >
+                  <CheckCircle sx={{ fontSize: 32, color: 'success.main' }} />
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Link
-            to="/new-request"
-            className="bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-lg p-4 hover:from-purple-600 hover:to-blue-600 transition text-center"
-          >
-            <p className="font-medium">+ Request New Repair</p>
-          </Link>
-          <Link
-            to="/my-repairs"
-            className="bg-gray-100 border border-gray-300 rounded-lg p-4 hover:bg-gray-200 transition text-center"
-          >
-            <p className="font-medium text-gray-700">Track My Repairs</p>
-          </Link>
-        </div>
-      </div>
+      <Card sx={{ mb: 3 }} elevation={isMobile ? 2 : 3}>
+        <CardContent>
+          <Typography variant="h6" fontWeight="600" gutterBottom>
+            Quick Actions
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <Button
+                fullWidth
+                variant="contained"
+                size="large"
+                startIcon={<Add />}
+                onClick={() => {
+                  if (navigator.vibrate) navigator.vibrate(30);
+                  navigate('/new-request');
+                }}
+                sx={{
+                  minHeight: 56,
+                  fontSize: isMobile ? 16 : 14,
+                  fontWeight: 600,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                }}
+              >
+                Request New Repair
+              </Button>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Button
+                fullWidth
+                variant="outlined"
+                size="large"
+                startIcon={<TrendingUp />}
+                onClick={() => navigate('/my-repairs')}
+                sx={{
+                  minHeight: 56,
+                  fontSize: isMobile ? 16 : 14,
+                  fontWeight: 600,
+                }}
+              >
+                Track My Repairs
+              </Button>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
 
       {/* Recent Repairs */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Recent Repairs</h2>
-        </div>
-        <div className="divide-y divide-gray-200">
+      <Card elevation={isMobile ? 2 : 3}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6" fontWeight="600">
+              Recent Repairs
+            </Typography>
+            {recentOrders.length > 0 && (
+              <Button
+                size="small"
+                endIcon={<ArrowForward />}
+                onClick={() => navigate('/my-repairs')}
+              >
+                View All
+              </Button>
+            )}
+          </Box>
+
           {recentOrders.length === 0 ? (
-            <div className="px-6 py-8 text-center text-gray-500">
-              <p>No repair history yet</p>
-              <Link to="/new-request" className="text-purple-600 hover:text-purple-500 font-medium mt-2 inline-block">
-                Submit your first repair request →
-              </Link>
-            </div>
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body1" color="text.secondary" gutterBottom>
+                No repair history yet
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={() => navigate('/new-request')}
+                sx={{ mt: 2 }}
+              >
+                Submit Your First Request
+              </Button>
+            </Box>
           ) : (
-            recentOrders.map((order) => (
-              <div key={order.id} className="px-6 py-4 hover:bg-gray-50 transition">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{order.device}</p>
-                    <p className="text-sm text-gray-500">{order.description}</p>
-                    <p className="text-xs text-gray-400 mt-1">Submitted: {order.created_at}</p>
-                  </div>
-                  <span
-                    className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
-                      order.status
-                    )}`}
+            <List disablePadding>
+              {recentOrders.map((order, index) => (
+                <React.Fragment key={order.id}>
+                  {index > 0 && <Divider />}
+                  <ListItem
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: 'action.hover' },
+                      px: isMobile ? 1 : 2,
+                    }}
+                    onClick={() => navigate('/my-repairs')}
                   >
-                    {order.status}
-                  </span>
-                </div>
-              </div>
-            ))
+                    <ListItemIcon>
+                      <Build color="action" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Typography variant="body2" fontWeight="600">
+                          {order.device?.brand} {order.device?.model}
+                        </Typography>
+                      }
+                      secondary={
+                        <React.Fragment>
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            {order.issue_description?.substring(0, 50)}
+                            {order.issue_description?.length > 50 ? '...' : ''}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {new Date(order.created_at).toLocaleDateString()}
+                          </Typography>
+                        </React.Fragment>
+                      }
+                    />
+                    <Chip
+                      label={formatStatus(order.status)}
+                      color={getStatusColor(order.status)}
+                      size="small"
+                    />
+                  </ListItem>
+                </React.Fragment>
+              ))}
+            </List>
           )}
-        </div>
-      </div>
-    </div>
+        </CardContent>
+      </Card>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </Container>
   );
 };
 

@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-// Use environment variable, fallback to localhost for development
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-console.log('🔗 API URL:', API_BASE_URL); // Debug log
+console.log('🔗 Customer Portal API URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -30,7 +29,6 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid - clear and redirect to login
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -39,36 +37,62 @@ api.interceptors.response.use(
   }
 );
 
-// Authentication endpoints
+// ==========================================
+// AUTHENTICATION
+// ==========================================
 export const authAPI = {
   login: (email, password) =>
-    api.post('/api/auth/login', { email, password }),  // ✅ Added leading /
+    api.post('/api/auth/login', { email, password }),
   
   register: (name, email, phone, password) =>
-    api.post('/api/auth/register', { name, email, phone, password }),  // ✅ Added leading /
+    api.post('/api/auth/register', { name, email, phone, password }),
   
   getCurrentUser: () =>
-    api.get('/api/auth/me'),  // ✅ Added leading /
+    api.get('/api/auth/me'),
 };
 
-// Customer endpoints
+// ==========================================
+// CUSTOMER ENDPOINTS (JWT-based)
+// ==========================================
 export const customerAPI = {
-  getProfile: (id) => api.get(`/api/customers/${id}`),  // ✅ Added leading /
-  updateProfile: (id, data) => api.put(`/api/customers/${id}`, data),  // ✅ Added leading /
-};
-
-// Device endpoints
-export const deviceAPI = {
-  getMyDevices: () => api.get('/api/devices'),  // ✅ Added leading /
-  getDevice: (id) => api.get(`/api/devices/${id}`),  // ✅ Added leading /
-  createDevice: (data) => api.post('/api/devices', data),  // ✅ Added leading /
-};
-
-// Work order endpoints
-export const workOrderAPI = {
-  getMyWorkOrders: () => api.get('/api/work-orders'),  // ✅ Added leading /
-  getWorkOrder: (id) => api.get(`/api/work-orders/${id}`),  // ✅ Added leading /
-  createWorkOrder: (data) => api.post('/api/work-orders', data),  // ✅ Added leading /
+  // Profile
+  getMyProfile: () => 
+    api.get('/api/customers/profile/me'),
+  
+  updateMyProfile: (data) => 
+    api.put('/api/customers/profile/me', data),
+  
+  deleteMyAccount: () => 
+    api.delete('/api/customers/profile/me'),
+  
+  // Devices
+  getMyDevices: () => 
+    api.get('/api/customers/devices'),
+  
+  createMyDevice: (data) => 
+    api.post('/api/customers/devices', data),
+  
+  getMyDevice: (id) => 
+    api.get(`/api/customers/devices/${id}`),
+  
+  updateMyDevice: (id, data) => 
+    api.put(`/api/customers/devices/${id}`, data),
+  
+  deleteMyDevice: (id) => 
+    api.delete(`/api/customers/devices/${id}`),
+  
+  // Work Orders
+  getMyWorkOrders: () => 
+    api.get('/api/customers/work-orders'),
+  
+  createMyWorkOrder: (data) => 
+    api.post('/api/customers/work-orders', data),
+  
+  getMyWorkOrder: (id) => 
+    api.get(`/api/customers/work-orders/${id}`),
+  
+  cancelMyWorkOrder: (id) => 
+    api.delete(`/api/customers/work-orders/${id}`),
 };
 
 export default api;
