@@ -1,47 +1,51 @@
-import React, { useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Container, Typography, Box, Card, CardContent, TextField,
-  Button, Alert, MenuItem, FormControl, InputLabel, Select,
-  Skeleton, Grid, Chip, IconButton, Stepper, Step, StepLabel,
-  useTheme, useMediaQuery, InputAdornment, Avatar, List, ListItem,
-  ListItemText, ListItemIcon, Divider,
+  Container, Typography, Box, Card, CardContent, Button,
+  TextField, MenuItem, Stepper, Step, StepLabel, Grid,
+  Alert, Dialog, DialogContent, DialogTitle, IconButton,
+  useTheme, useMediaQuery, Divider, FormControlLabel,
+  Checkbox, RadioGroup, Radio,
 } from '@mui/material';
 import {
-  Send, ArrowBack, CloudUpload, CalendarToday, Phone,
-  Info, AttachFile, Close, Warning,
+  ArrowBack, ArrowForward, CheckCircle, Close, Add,
+  CloudUpload, Smartphone, Laptop, Tablet,
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { customerAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const NewRequest = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  
-  const [devices, setDevices] = useState([]);
-  const [loadingDevices, setLoadingDevices] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+
   const [activeStep, setActiveStep] = useState(0);
-  const [uploadedFiles, setUploadedFiles] = useState([]);
-  
+  const [devices, setDevices] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [openAddDevice, setOpenAddDevice] = useState(false);
+
+  // Form data
   const [formData, setFormData] = useState({
-    device_id: location.state?.deviceId || '',
+    device_id: '',
+    service_type: 'repair',
     issue_description: '',
     priority: 'medium',
-    service_type: 'repair',
-    appointment_date: '',
-    appointment_time: '',
-    schedule_call: false,
-    call_time_preference: '',
-    additional_notes: '',
+    preferred_contact: 'email',
+    photos: [],
   });
 
-  const steps = ['Device & Issue', 'Schedule', 'Review'];
+  // New device form
+  const [newDevice, setNewDevice] = useState({
+    device_type: 'phone',
+    brand: '',
+    model: '',
+    serial_number: '',
+  });
+
+  const steps = ['Device & Issue', 'Contact Preferences', 'Review'];
 
   useEffect(() => {
     fetchDevices();
@@ -49,250 +53,354 @@ const NewRequest = () => {
 
   const fetchDevices = async () => {
     try {
-      setLoadingDevices(true);
       const response = await customerAPI.getMyDevices();
       setDevices(response.data);
     } catch (err) {
       console.error('Error fetching devices:', err);
-      setError('Failed to load devices. Please try again.');
-    } finally {
-      setLoadingDevices(false);
     }
   };
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? checked : value,
-    });
-  };
+  const handleAddDevice = async () => {
+    try {
+      setLoading(true);
+      setError('');
 
-  const handleFileUpload = (e) => {
-    const files = Array.from(e.target.files);
-    const newFiles = files.map(file => ({
-      file,
-      preview: URL.createObjectURL(file),
-      name: file.name,
-      size: (file.size / 1024).toFixed(2), // KB
-    }));
-    setUploadedFiles([...uploadedFiles, ...newFiles]);
-  };
+      const response = await customerAPI.createMyDevice(newDevice);
+      setDevices([response.data, ...devices]);
+      setFormData({ ...formData, device_id: response.data.id });
+      
+      setOpenAddDevice(false);
+      setNewDevice({
+        device_type: 'phone',
+        brand: '',
+        model: '',
+        serial_number: '',
+      });
 
-  const removeFile = (index) => {
-    const newFiles = uploadedFiles.filter((_, i) => i !== index);
-    setUploadedFiles(newFiles);
+      if (navigator.vibrate) navigator.vibrate([50, 100, 50]);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to add device');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleNext = () => {
-    if (activeStep === 0) {
-      if (!formData.device_id || !formData.issue_description) {
-        setError('Please select a device and describe the issue');
-        return;
-      }
+    if (activeStep === 0 && !formData.device_id) {
+      setError('Please select a device or add a new one');
+      return;
+    }
+    if (activeStep === 0 && !formData.issue_description.trim()) {
+      setError('Please describe the issue');
+      return;
     }
     setError('');
     setActiveStep((prev) => prev + 1);
+    window.scrollTo(0, 0);
   };
 
   const handleBack = () => {
     setActiveStep((prev) => prev - 1);
+    window.scrollTo(0, 0);
   };
 
   const handleSubmit = async () => {
     try {
-      setSubmitting(true);
+      setLoading(true);
       setError('');
-      
+
       const requestData = {
         device_id: parseInt(formData.device_id),
         issue_description: formData.issue_description,
-        status: 'pending',
         priority: formData.priority,
+        status: 'pending',
       };
 
-      // In a real app, you'd also send appointment_date, files, etc.
-      // For now, we'll just send the basic work order
+      await customerAPI.createMyWorkOrder(requestData);
 
-      await customerAPI.post('/api/work-orders', requestData);
-      
-      setSuccess(true);
-      if (navigator.vibrate) navigator.vibrate([50, 100, 50]);
-      
+      setSuccess('Repair request submitted successfully!');
+      if (navigator.vibrate) navigator.vibrate([50, 100, 50, 100, 50]);
+
       setTimeout(() => {
         navigate('/my-repairs');
-      }, 2000);
-      
+      }, 1500);
     } catch (err) {
-      console.error('Error submitting repair request:', err);
-      setError(err.response?.data?.detail || 'Failed to submit request. Please try again.');
-      if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+      console.error('Error submitting request:', err);
+      setError(err.response?.data?.detail || 'Failed to submit request');
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  if (loadingDevices) {
-    return (
-      <Container maxWidth="md" sx={{ mt: 4 }}>
-        <Skeleton variant="text" height={60} />
-        <Skeleton variant="rounded" height={400} sx={{ mt: 2 }} />
-      </Container>
-    );
-  }
+  const handlePhotoUpload = (event) => {
+    const files = Array.from(event.target.files);
+    setFormData({
+      ...formData,
+      photos: [...formData.photos, ...files],
+    });
+  };
 
-  if (devices.length === 0) {
-    return (
-      <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-        <Card>
-          <CardContent sx={{ textAlign: 'center', py: 6 }}>
-            <Typography variant="h5" gutterBottom>
-              No Devices Found
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              You need to register a device before submitting a repair request.
-            </Typography>
-            <Button
-              variant="contained"
-              onClick={() => navigate('/my-devices')}
-            >
-              Add Your First Device
-            </Button>
-          </CardContent>
-        </Card>
-      </Container>
-    );
-  }
+  const getDeviceIcon = (type) => {
+    switch (type?.toLowerCase()) {
+      case 'phone': return <Smartphone />;
+      case 'laptop': return <Laptop />;
+      case 'tablet': return <Tablet />;
+      default: return <Smartphone />;
+    }
+  };
+
+  const selectedDevice = devices.find(d => d.id === parseInt(formData.device_id));
 
   return (
     <Container 
       maxWidth="md" 
       sx={{ 
-        mt: isMobile ? 1 : 4, 
-        mb: isMobile ? 10 : 4,
-        px: isMobile ? 1.5 : 3,
+        mt: isMobile ? 3 : 6, 
+        mb: isMobile ? 12 : 6, 
+        px: isMobile ? 2 : 3 
       }}
     >
       {/* Header */}
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 4 }}>
         <Button
           startIcon={<ArrowBack />}
-          onClick={() => navigate(-1)}
-          sx={{ mb: 2 }}
+          onClick={() => navigate('/dashboard')}
+          sx={{
+            mb: 2,
+            textTransform: 'none',
+            color: 'text.secondary',
+          }}
         >
           Back
         </Button>
-        <Typography variant={isMobile ? 'h5' : 'h4'} fontWeight="600">
-          New Service Request
+        <Typography 
+          variant={isMobile ? 'h4' : 'h3'}
+          sx={{ 
+            fontWeight: 600,
+            letterSpacing: '-0.02em',
+            mb: 1,
+          }}
+        >
+          New Repair Request
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          Submit a repair request and schedule service
+        <Typography variant="body1" color="text.secondary">
+          Tell us about your device issue
         </Typography>
       </Box>
 
-      {/* Stepper - Desktop only */}
-      {!isMobile && (
-        <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-          {steps.map((label) => (
-            <Step key={label}>
-              <StepLabel>{label}</StepLabel>
-            </Step>
-          ))}
-        </Stepper>
-      )}
+      {/* Stepper */}
+      <Card sx={{ mb: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }} elevation={0}>
+        <CardContent sx={{ p: 3 }}>
+          <Stepper activeStep={activeStep} sx={{ mb: 2 }}>
+            {steps.map((label) => (
+              <Step key={label}>
+                <StepLabel>{label}</StepLabel>
+              </Step>
+            ))}
+          </Stepper>
+        </CardContent>
+      </Card>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }} onClose={() => setError('')}>
           {error}
         </Alert>
       )}
 
       {success && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          Request submitted successfully! Redirecting...
+        <Alert 
+          severity="success" 
+          sx={{ mb: 3, borderRadius: 3 }}
+          icon={<CheckCircle />}
+        >
+          {success}
         </Alert>
       )}
 
-      <Card elevation={3}>
-        <CardContent sx={{ p: isMobile ? 2 : 4 }}>
-          {/* Step 0: Device & Issue */}
+      {/* Step Content */}
+      <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }} elevation={0}>
+        <CardContent sx={{ p: isMobile ? 3 : 4 }}>
+          {/* Step 1: Device & Issue */}
           {activeStep === 0 && (
             <Box>
-              <Typography variant="h6" gutterBottom fontWeight="600">
+              <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
                 Device & Issue Details
               </Typography>
 
-              <FormControl fullWidth margin="normal" required>
-                <InputLabel>Select Device</InputLabel>
-                <Select
-                  name="device_id"
-                  value={formData.device_id}
-                  onChange={handleChange}
-                  label="Select Device"
-                >
-                  {devices.map((device) => (
-                    <MenuItem key={device.id} value={device.id}>
-                      {device.brand} {device.model} ({device.device_type})
-                      {device.serial_number && ` - ${device.serial_number}`}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              {/* Device Selection */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
+                  Select Device
+                </Typography>
 
-              <FormControl fullWidth margin="normal">
-                <InputLabel>Service Type</InputLabel>
-                <Select
-                  name="service_type"
+                {devices.length === 0 ? (
+                  <Box
+                    sx={{
+                      p: 3,
+                      borderRadius: 3,
+                      border: '2px dashed',
+                      borderColor: 'divider',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      No devices found. Add one to continue.
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      startIcon={<Add />}
+                      onClick={() => setOpenAddDevice(true)}
+                      sx={{
+                        borderRadius: 3,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Add Device
+                    </Button>
+                  </Box>
+                ) : (
+                  <Box>
+                    <Grid container spacing={2}>
+                      {devices.map((device) => (
+                        <Grid item xs={12} sm={6} key={device.id}>
+                          <Box
+                            onClick={() => setFormData({ ...formData, device_id: device.id })}
+                            sx={{
+                              p: 2,
+                              borderRadius: 3,
+                              border: '2px solid',
+                              borderColor: formData.device_id === device.id ? '#007AFF' : 'divider',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              bgcolor: formData.device_id === device.id ? '#007AFF10' : 'transparent',
+                              '&:hover': {
+                                borderColor: '#007AFF',
+                              },
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                              <Box sx={{ color: formData.device_id === device.id ? '#007AFF' : 'text.secondary' }}>
+                                {getDeviceIcon(device.device_type)}
+                              </Box>
+                              <Box>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {device.brand} {device.model}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {device.device_type}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+
+                    <Button
+                      startIcon={<Add />}
+                      onClick={() => setOpenAddDevice(true)}
+                      sx={{
+                        mt: 2,
+                        textTransform: 'none',
+                        color: '#007AFF',
+                      }}
+                    >
+                      Add another device
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+
+              <Divider sx={{ my: 3 }} />
+
+              {/* Service Type */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
+                  Service Type
+                </Typography>
+                <TextField
+                  select
+                  fullWidth
                   value={formData.service_type}
-                  onChange={handleChange}
-                  label="Service Type"
+                  onChange={(e) => setFormData({ ...formData, service_type: e.target.value })}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                    },
+                  }}
                 >
                   <MenuItem value="repair">Repair</MenuItem>
-                  <MenuItem value="diagnostic">Diagnostic</MenuItem>
-                  <MenuItem value="maintenance">Maintenance</MenuItem>
                   <MenuItem value="consultation">Consultation</MenuItem>
-                </Select>
-              </FormControl>
+                  <MenuItem value="diagnostic">Diagnostic Only</MenuItem>
+                </TextField>
+              </Box>
 
-              <TextField
-                fullWidth
-                multiline
-                rows={6}
-                name="issue_description"
-                label="Issue Description *"
-                value={formData.issue_description}
-                onChange={handleChange}
-                margin="normal"
-                required
-                placeholder="Please describe the issue in detail. Include any error messages, unusual behavior, or physical damage."
-                helperText="Be as detailed as possible to help our technicians"
-                inputProps={{ style: { fontSize: isMobile ? 16 : 14 } }}
-              />
+              {/* Issue Description */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
+                  Issue Description
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={5}
+                  value={formData.issue_description}
+                  onChange={(e) => setFormData({ ...formData, issue_description: e.target.value })}
+                  placeholder="Describe the issue in detail. Be specific about what's not working, when it started, and any error messages..."
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                    },
+                  }}
+                  inputProps={{ style: { fontSize: isMobile ? 16 : 14 } }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  Be as detailed as possible to help our technicians
+                </Typography>
+              </Box>
 
-              <FormControl fullWidth margin="normal">
-                <InputLabel>Priority</InputLabel>
-                <Select
-                  name="priority"
+              {/* Priority */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
+                  Priority
+                </Typography>
+                <TextField
+                  select
+                  fullWidth
                   value={formData.priority}
-                  onChange={handleChange}
-                  label="Priority"
+                  onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                    },
+                  }}
                 >
-                  <MenuItem value="low">Low - Not urgent</MenuItem>
+                  <MenuItem value="low">Low - Can wait a few days</MenuItem>
                   <MenuItem value="medium">Medium - Normal repair</MenuItem>
-                  <MenuItem value="high">High - Urgent repair needed</MenuItem>
-                </Select>
-              </FormControl>
+                  <MenuItem value="high">High - Urgent, need it soon</MenuItem>
+                </TextField>
+              </Box>
 
               {/* Photo Upload */}
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Upload Photos (Optional)
+              <Box>
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
+                  Photos (Optional)
                 </Typography>
                 <Button
-                  component="label"
                   variant="outlined"
+                  component="label"
                   startIcon={<CloudUpload />}
-                  fullWidth={isMobile}
+                  sx={{
+                    borderRadius: 3,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    borderColor: 'divider',
+                    color: 'text.primary',
+                    '&:hover': {
+                      borderColor: 'text.primary',
+                    },
+                  }}
                 >
                   Upload Images
                   <input
@@ -300,276 +408,311 @@ const NewRequest = () => {
                     hidden
                     multiple
                     accept="image/*"
-                    onChange={handleFileUpload}
+                    onChange={handlePhotoUpload}
                   />
                 </Button>
-                
-                {uploadedFiles.length > 0 && (
-                  <Grid container spacing={1} sx={{ mt: 1 }}>
-                    {uploadedFiles.map((file, index) => (
-                      <Grid item xs={6} sm={4} key={index}>
-                        <Box sx={{ position: 'relative' }}>
-                          <Avatar
-                            src={file.preview}
-                            variant="rounded"
-                            sx={{ width: '100%', height: 120 }}
-                          />
-                          <IconButton
-                            size="small"
-                            sx={{
-                              position: 'absolute',
-                              top: 4,
-                              right: 4,
-                              bgcolor: 'background.paper',
-                            }}
-                            onClick={() => removeFile(index)}
-                          >
-                            <Close fontSize="small" />
-                          </IconButton>
-                          <Typography variant="caption" display="block" noWrap>
-                            {file.name}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                    ))}
-                  </Grid>
+                {formData.photos.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
+                    {formData.photos.length} photo{formData.photos.length > 1 ? 's' : ''} selected
+                  </Typography>
                 )}
               </Box>
             </Box>
           )}
 
-          {/* Step 1: Schedule */}
+          {/* Step 2: Contact Preferences */}
           {activeStep === 1 && (
             <Box>
-              <Typography variant="h6" gutterBottom fontWeight="600">
-                Schedule Appointment
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Choose a convenient time for drop-off or on-site service
+              <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
+                Contact Preferences
               </Typography>
 
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    type="date"
-                    name="appointment_date"
-                    label="Preferred Date"
-                    value={formData.appointment_date}
-                    onChange={handleChange}
-                    InputLabelProps={{ shrink: true }}
-                    inputProps={{
-                      min: new Date().toISOString().split('T')[0],
-                      style: { fontSize: isMobile ? 16 : 14 }
-                    }}
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 2 }}>
+                  How would you like to receive updates?
+                </Typography>
+                <RadioGroup
+                  value={formData.preferred_contact}
+                  onChange={(e) => setFormData({ ...formData, preferred_contact: e.target.value })}
+                >
+                  <FormControlLabel 
+                    value="email" 
+                    control={<Radio />} 
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>Email</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {user?.email}
+                        </Typography>
+                      </Box>
+                    }
                   />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    type="time"
-                    name="appointment_time"
-                    label="Preferred Time"
-                    value={formData.appointment_time}
-                    onChange={handleChange}
-                    InputLabelProps={{ shrink: true }}
-                    inputProps={{ style: { fontSize: isMobile ? 16 : 14 } }}
+                  <FormControlLabel 
+                    value="sms" 
+                    control={<Radio />} 
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>SMS Text</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {user?.phone}
+                        </Typography>
+                      </Box>
+                    }
                   />
-                </Grid>
-              </Grid>
+                  <FormControlLabel 
+                    value="both" 
+                    control={<Radio />} 
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>Both Email & SMS</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Get notified everywhere
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </RadioGroup>
+              </Box>
 
               <Divider sx={{ my: 3 }} />
 
-              {/* Schedule Call */}
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Would you like us to call you?
+              <Box>
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 2 }}>
+                  Notification Preferences
                 </Typography>
-                <FormControl fullWidth>
-                  <InputLabel>Call Preference</InputLabel>
-                  <Select
-                    name="call_time_preference"
-                    value={formData.call_time_preference}
-                    onChange={handleChange}
-                    label="Call Preference"
-                  >
-                    <MenuItem value="">No call needed</MenuItem>
-                    <MenuItem value="morning">Morning (9 AM - 12 PM)</MenuItem>
-                    <MenuItem value="afternoon">Afternoon (12 PM - 5 PM)</MenuItem>
-                    <MenuItem value="evening">Evening (5 PM - 7 PM)</MenuItem>
-                  </Select>
-                </FormControl>
+                <FormControlLabel
+                  control={<Checkbox defaultChecked />}
+                  label="Status change updates"
+                />
+                <FormControlLabel
+                  control={<Checkbox defaultChecked />}
+                  label="Technician notes and messages"
+                />
+                <FormControlLabel
+                  control={<Checkbox defaultChecked />}
+                  label="Completion notification"
+                />
               </Box>
-
-              {/* Additional Notes */}
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                name="additional_notes"
-                label="Additional Notes"
-                value={formData.additional_notes}
-                onChange={handleChange}
-                placeholder="Any special instructions or preferences?"
-                inputProps={{ style: { fontSize: isMobile ? 16 : 14 } }}
-              />
-
-              {/* No-show warning */}
-              <Alert severity="warning" icon={<Warning />} sx={{ mt: 3 }}>
-                <Typography variant="caption" fontWeight="600" display="block">
-                  Important: No-Show Policy
-                </Typography>
-                <Typography variant="caption">
-                  No-show appointments will be assessed a $10 fee on your next repair.
-                </Typography>
-              </Alert>
             </Box>
           )}
 
-          {/* Step 2: Review */}
+          {/* Step 3: Review */}
           {activeStep === 2 && (
             <Box>
-              <Typography variant="h6" gutterBottom fontWeight="600">
+              <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
                 Review Your Request
               </Typography>
-              
-              <List>
-                <ListItem>
-                  <ListItemIcon><Info color="primary" /></ListItemIcon>
-                  <ListItemText
-                    primary="Device"
-                    secondary={
-                      devices.find(d => d.id === parseInt(formData.device_id))
-                        ? `${devices.find(d => d.id === parseInt(formData.device_id)).brand} 
-                           ${devices.find(d => d.id === parseInt(formData.device_id)).model}`
-                        : 'N/A'
-                    }
-                  />
-                </ListItem>
-                
-                <ListItem>
-                  <ListItemIcon><AttachFile color="primary" /></ListItemIcon>
-                  <ListItemText
-                    primary="Service Type"
-                    secondary={formData.service_type.charAt(0).toUpperCase() + formData.service_type.slice(1)}
-                  />
-                </ListItem>
 
-                <ListItem>
-                  <ListItemIcon><Info color="primary" /></ListItemIcon>
-                  <ListItemText
-                    primary="Priority"
-                    secondary={formData.priority.charAt(0).toUpperCase() + formData.priority.slice(1)}
-                  />
-                </ListItem>
-
-                {formData.appointment_date && (
-                  <ListItem>
-                    <ListItemIcon><CalendarToday color="primary" /></ListItemIcon>
-                    <ListItemText
-                      primary="Appointment"
-                      secondary={`${formData.appointment_date} at ${formData.appointment_time || 'Any time'}`}
-                    />
-                  </ListItem>
-                )}
-
-                {formData.call_time_preference && (
-                  <ListItem>
-                    <ListItemIcon><Phone color="primary" /></ListItemIcon>
-                    <ListItemText
-                      primary="Call Requested"
-                      secondary={formData.call_time_preference.charAt(0).toUpperCase() + 
-                                 formData.call_time_preference.slice(1)}
-                    />
-                  </ListItem>
-                )}
-
-                {uploadedFiles.length > 0 && (
-                  <ListItem>
-                    <ListItemIcon><CloudUpload color="primary" /></ListItemIcon>
-                    <ListItemText
-                      primary="Photos Attached"
-                      secondary={`${uploadedFiles.length} ${uploadedFiles.length === 1 ? 'photo' : 'photos'}`}
-                    />
-                  </ListItem>
-                )}
-              </List>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 2 }}>
-                <Typography variant="subtitle2" gutterBottom fontWeight="600">
-                  Issue Description:
+              <Box sx={{ mb: 3, p: 3, borderRadius: 3, bgcolor: '#F2F2F7' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1, display: 'block' }}>
+                  Device
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body1" fontWeight={600}>
+                  {selectedDevice?.brand} {selectedDevice?.model}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+                  {selectedDevice?.device_type}
+                </Typography>
+              </Box>
+
+              <Box sx={{ mb: 3, p: 3, borderRadius: 3, bgcolor: '#F2F2F7' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1, display: 'block' }}>
+                  Service Type
+                </Typography>
+                <Typography variant="body1" fontWeight={600} sx={{ textTransform: 'capitalize' }}>
+                  {formData.service_type}
+                </Typography>
+              </Box>
+
+              <Box sx={{ mb: 3, p: 3, borderRadius: 3, bgcolor: '#F2F2F7' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1, display: 'block' }}>
+                  Issue Description
+                </Typography>
+                <Typography variant="body2" sx={{ lineHeight: 1.6 }}>
                   {formData.issue_description}
                 </Typography>
               </Box>
 
-              {formData.additional_notes && (
-                <Box sx={{ p: 2, bgcolor: 'info.light', borderRadius: 2, mt: 2 }}>
-                  <Typography variant="subtitle2" gutterBottom fontWeight="600">
-                    Additional Notes:
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {formData.additional_notes}
-                  </Typography>
-                </Box>
-              )}
+              <Box sx={{ mb: 3, p: 3, borderRadius: 3, bgcolor: '#F2F2F7' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1, display: 'block' }}>
+                  Priority
+                </Typography>
+                <Typography variant="body1" fontWeight={600} sx={{ textTransform: 'capitalize' }}>
+                  {formData.priority}
+                </Typography>
+              </Box>
+
+              <Box sx={{ p: 3, borderRadius: 3, bgcolor: '#007AFF10', border: '1px solid #007AFF30' }}>
+                <Typography variant="body2" sx={{ color: '#007AFF' }}>
+                  You'll receive updates via <strong>{formData.preferred_contact === 'both' ? 'email and SMS' : formData.preferred_contact}</strong>
+                </Typography>
+              </Box>
             </Box>
           )}
 
-          {/* Action Buttons */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-            <Button
-              disabled={activeStep === 0 || submitting}
-              onClick={handleBack}
-              variant="outlined"
-            >
-              Back
-            </Button>
-            
-            {activeStep < steps.length - 1 ? (
+          {/* Navigation Buttons */}
+          <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
+            {activeStep > 0 && (
               <Button
-                variant="contained"
-                onClick={handleNext}
-              >
-                Next
-              </Button>
-            ) : (
-              <Button
-                variant="contained"
-                onClick={handleSubmit}
-                disabled={submitting}
-                endIcon={<Send />}
+                onClick={handleBack}
                 sx={{
-                  minWidth: 120,
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  borderRadius: 3,
+                  height: 48,
+                  px: 4,
+                  textTransform: 'none',
+                  fontWeight: 600,
                 }}
               >
-                {submitting ? 'Submitting...' : 'Submit Request'}
+                Back
               </Button>
             )}
+            <Button
+              fullWidth
+              variant="contained"
+              onClick={activeStep === steps.length - 1 ? handleSubmit : handleNext}
+              disabled={loading}
+              endIcon={activeStep === steps.length - 1 ? <CheckCircle /> : <ArrowForward />}
+              sx={{
+                borderRadius: 3,
+                height: 48,
+                textTransform: 'none',
+                fontWeight: 600,
+                bgcolor: '#007AFF',
+                '&:hover': {
+                  bgcolor: '#0051D5',
+                },
+              }}
+            >
+              {loading ? 'Submitting...' : activeStep === steps.length - 1 ? 'Submit Request' : 'Continue'}
+            </Button>
           </Box>
         </CardContent>
       </Card>
 
-      {/* Info Card */}
-      <Card sx={{ mt: 3, bgcolor: 'info.light' }} elevation={2}>
-        <CardContent>
-          <Typography variant="subtitle2" fontWeight="600" gutterBottom>
-            What happens next?
+      {/* Add Device Dialog */}
+      <Dialog
+        open={openAddDevice}
+        onClose={() => !loading && setOpenAddDevice(false)}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: {
+            borderRadius: isMobile ? 0 : 4,
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}>
+          <Typography variant="h6" fontWeight={600}>
+            Add Device
           </Typography>
-          <Typography variant="body2" component="div">
-            <ol style={{ paddingLeft: '20px', margin: 0 }}>
-              <li>Our team reviews your request within 24 hours</li>
-              <li>You'll receive an email with estimated cost and timeline</li>
-              <li>A technician will be assigned to your repair</li>
-              <li>Track your repair status anytime in "My Repairs"</li>
-            </ol>
-          </Typography>
-        </CardContent>
-      </Card>
+          <IconButton onClick={() => setOpenAddDevice(false)} disabled={loading}>
+            <Close />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: 3, mt: 2 }}>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
+              Device Type
+            </Typography>
+            <TextField
+              select
+              fullWidth
+              value={newDevice.device_type}
+              onChange={(e) => setNewDevice({ ...newDevice, device_type: e.target.value })}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 3,
+                },
+              }}
+            >
+              <MenuItem value="phone">📱 Phone</MenuItem>
+              <MenuItem value="laptop">💻 Laptop</MenuItem>
+              <MenuItem value="tablet">📟 Tablet</MenuItem>
+            </TextField>
+          </Box>
+
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
+              Brand
+            </Typography>
+            <TextField
+              fullWidth
+              value={newDevice.brand}
+              onChange={(e) => setNewDevice({ ...newDevice, brand: e.target.value })}
+              placeholder="e.g., Apple, Samsung, Dell"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 3,
+                },
+              }}
+              inputProps={{ style: { fontSize: isMobile ? 16 : 14 } }}
+            />
+          </Box>
+
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
+              Model
+            </Typography>
+            <TextField
+              fullWidth
+              value={newDevice.model}
+              onChange={(e) => setNewDevice({ ...newDevice, model: e.target.value })}
+              placeholder="e.g., iPhone 15 Pro, MacBook Air"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 3,
+                },
+              }}
+              inputProps={{ style: { fontSize: isMobile ? 16 : 14 } }}
+            />
+          </Box>
+
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
+              Serial Number (Optional)
+            </Typography>
+            <TextField
+              fullWidth
+              value={newDevice.serial_number}
+              onChange={(e) => setNewDevice({ ...newDevice, serial_number: e.target.value })}
+              placeholder="e.g., ABC123456789"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 3,
+                },
+              }}
+              inputProps={{ style: { fontSize: isMobile ? 16 : 14 } }}
+            />
+          </Box>
+
+          <Button
+            fullWidth
+            variant="contained"
+            onClick={handleAddDevice}
+            disabled={!newDevice.brand || !newDevice.model || loading}
+            sx={{
+              borderRadius: 3,
+              height: 48,
+              textTransform: 'none',
+              fontWeight: 600,
+              bgcolor: '#007AFF',
+              '&:hover': {
+                bgcolor: '#0051D5',
+              },
+            }}
+          >
+            {loading ? 'Adding...' : 'Add Device'}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </Container>
   );
 };

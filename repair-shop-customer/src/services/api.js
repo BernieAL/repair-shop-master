@@ -93,6 +93,26 @@ export const customerAPI = {
   
   cancelMyWorkOrder: (id) => 
     api.delete(`/api/customers/work-orders/${id}`),
+
+
+  // Notifications
+  getMyNotifications: (unreadOnly = false) =>
+    api.get('/api/customers/notifications', { params: { unread_only: unreadOnly } }),
+
+  markNotificationAsRead: (id) =>
+    api.put(`/api/customers/notifications/${id}/read`),
+
+  markAllNotificationsAsRead: () =>
+    api.put('/api/customers/notifications/read-all'),
+
+  getUnreadCount: () =>
+    api.get('/api/customers/notifications/unread-count'),
 };
+
+
+
+
+
+
 
 export default api;
