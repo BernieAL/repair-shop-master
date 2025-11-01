@@ -1,261 +1,349 @@
 import React, { useState, useEffect } from 'react';
-import { workOrderAPI, deviceAPI, customerAPI } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import {
+  Container, Typography, Box, Card, CardContent, Button,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Paper, Chip, IconButton, TextField, InputAdornment, MenuItem,
+  Skeleton, useTheme, useMediaQuery, Alert, Grid, Dialog,
+  DialogTitle, DialogContent, DialogActions, Select, FormControl,
+  InputLabel,
+} from '@mui/material';
+import {
+  Search, Refresh, Visibility, Edit, FilterList,
+} from '@mui/icons-material';
+import { adminAPI } from '../services/api';
 
 const WorkOrders = () => {
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [workOrders, setWorkOrders] = useState([]);
-  const [devices, setDevices] = useState([]);
-  const [customers, setCustomers] = useState([]);
+  const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({
-    device_id: '',
-    description: '',
-    status: 'pending',
-    cost: '',
-  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [error, setError] = useState('');
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [openStatusDialog, setOpenStatusDialog] = useState(false);
+  const [newStatus, setNewStatus] = useState('');
+  const [technicianNotes, setTechnicianNotes] = useState('');
 
   useEffect(() => {
-    fetchData();
+    fetchWorkOrders();
   }, []);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    filterOrders();
+  }, [workOrders, searchQuery, statusFilter]);
+
+  const fetchWorkOrders = async () => {
     try {
       setLoading(true);
-      const [workOrdersRes, devicesRes, customersRes] = await Promise.all([
-        workOrderAPI.getAll(),
-        deviceAPI.getAll(),
-        customerAPI.getAll(),
-      ]);
-      setWorkOrders(workOrdersRes.data);
-      setDevices(devicesRes.data);
-      setCustomers(customersRes.data);
       setError('');
+      const response = await adminAPI.getAllWorkOrders();
+      setWorkOrders(response.data);
     } catch (err) {
-      setError('Failed to load data. Please check if the API is running.');
-      console.error('Error fetching data:', err);
+      console.error('Error fetching work orders:', err);
+      setError('Failed to load work orders');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const filterOrders = () => {
+    let filtered = workOrders;
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(o => o.status === statusFilter);
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      filtered = filtered.filter(o =>
+        o.id.toString().includes(searchQuery) ||
+        o.device?.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.device?.model?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.issue_description?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Sort by created date (newest first)
+    filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    setFilteredOrders(filtered);
+  };
+
+  const handleUpdateStatus = async () => {
     try {
-      const submitData = {
-        ...formData,
-        device_id: parseInt(formData.device_id),
-        cost: parseFloat(formData.cost) || 0,
-      };
-
-      if (editingId) {
-        await workOrderAPI.update(editingId, submitData);
-      } else {
-        await workOrderAPI.create(submitData);
-      }
-      setFormData({
-        device_id: '',
-        description: '',
-        status: 'pending',
-        cost: '',
-      });
-      setShowForm(false);
-      setEditingId(null);
-      fetchData();
+      setError('');
+      await adminAPI.updateWorkOrderStatus(
+        selectedOrder.id,
+        newStatus,
+        technicianNotes
+      );
+      setOpenStatusDialog(false);
+      setSelectedOrder(null);
+      setNewStatus('');
+      setTechnicianNotes('');
+      fetchWorkOrders();
     } catch (err) {
-      setError('Failed to save work order');
-      console.error('Error saving work order:', err);
+      setError(err.response?.data?.detail || 'Failed to update status');
     }
   };
 
-  const handleEdit = (workOrder) => {
-    setFormData({
-      device_id: workOrder.device_id.toString(),
-      description: workOrder.description,
-      status: workOrder.status,
-      cost: workOrder.cost?.toString() || '',
-    });
-    setEditingId(workOrder.id);
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this work order?')) {
-      try {
-        await workOrderAPI.delete(id);
-        fetchData();
-      } catch (err) {
-        setError('Failed to delete work order');
-        console.error('Error deleting work order:', err);
-      }
-    }
-  };
-
-  const handleCancel = () => {
-    setFormData({
-      device_id: '',
-      description: '',
-      status: 'pending',
-      cost: '',
-    });
-    setShowForm(false);
-    setEditingId(null);
-  };
-
-  const getDeviceInfo = (deviceId) => {
-    const device = devices.find((d) => d.id === deviceId);
-    if (!device) return 'Unknown Device';
-    return `${device.brand} ${device.model}`;
-  };
-
-  const getCustomerName = (deviceId) => {
-    const device = devices.find((d) => d.id === deviceId);
-    if (!device) return 'Unknown';
-    const customer = customers.find((c) => c.id === device.customer_id);
-    return customer ? customer.name : 'Unknown';
+  const openUpdateDialog = (order) => {
+    setSelectedOrder(order);
+    setNewStatus(order.status);
+    setTechnicianNotes(order.technician_notes || '');
+    setOpenStatusDialog(true);
   };
 
   const getStatusColor = (status) => {
-    const colors = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      'in-progress': 'bg-blue-100 text-blue-800',
-      completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
+    switch (status?.toLowerCase()) {
+      case 'pending': return 'warning';
+      case 'in_progress': return 'info';
+      case 'completed': return 'success';
+      case 'cancelled': return 'error';
+      case 'waiting_for_parts': return 'default';
+      default: return 'default';
+    }
+  };
+
+  const formatStatus = (status) => {
+    return status?.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ') || 'Unknown';
+  };
+
+  const getPriorityColor = (priority) => {
+    switch (priority?.toLowerCase()) {
+      case 'high': return 'error';
+      case 'medium': return 'warning';
+      case 'low': return 'info';
+      default: return 'default';
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-xl text-gray-600">Loading work orders...</div>
-      </div>
+      <Container maxWidth="xl" sx={{ mt: 4, px: 3 }}>
+        <Skeleton variant="text" width="40%" height={40} sx={{ mb: 3 }} />
+        <Skeleton variant="rounded" height={400} />
+      </Container>
     );
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Work Orders</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
-        >
-          + New Work Order
-        </button>
-      </div>
+    <Container maxWidth="xl" sx={{ mt: isMobile ? 2 : 4, mb: 4, px: isMobile ? 1.5 : 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant={isMobile ? 'h5' : 'h4'} fontWeight="600">
+            Work Orders
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {filteredOrders.length} total orders
+          </Typography>
+        </Box>
+        <IconButton onClick={fetchWorkOrders}>
+          <Refresh />
+        </IconButton>
+      </Box>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
           {error}
-        </div>
+        </Alert>
       )}
 
-      {/* Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-4">
-              {editingId ? 'Edit Work Order' : 'Create New Work Order'}
-            </h2>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Device *
-                </label>
-                <select
-                  required
-                  value={formData.device_id}
-                  onChange={(e) => setFormData({ ...formData, device_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">Select a device</option>
-                  {devices.map((device) => {
-                    const customer = customers.find((c) => c.id === device.customer_id);
-                    return (
-                      <option key={device.id} value={device.id}>
-                        {customer?.name} - {device.brand} {device.model}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Description *
-                </label>
-                <textarea
-                  required
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  rows="4"
-                  placeholder="Describe the issue or repair needed..."
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Status *
-                </label>
-                <select
-                  required
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="in-progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Cost ($)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.cost}
-                  onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div className="flex space-x-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
-                >
-                  {editingId ? 'Update' : 'Create'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Filters */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={8}>
+              <TextField
+                fullWidth
+                placeholder="Search by order #, device, or issue..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <TextField
+                select
+                fullWidth
+                label="Filter by Status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <MenuItem value="all">All Statuses</MenuItem>
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="in_progress">In Progress</MenuItem>
+                <MenuItem value="waiting_for_parts">Waiting for Parts</MenuItem>
+                <MenuItem value="completed">Completed</MenuItem>
+                <MenuItem value="cancelled">Cancelled</MenuItem>
+              </TextField>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
 
       {/* Work Orders Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Customer
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Device
-              </th>
-              <th className="px-6
+      <Card>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell><strong>Order #</strong></TableCell>
+                <TableCell><strong>Customer</strong></TableCell>
+                <TableCell><strong>Device</strong></TableCell>
+                <TableCell><strong>Issue</strong></TableCell>
+                <TableCell><strong>Status</strong></TableCell>
+                {!isMobile && <TableCell><strong>Priority</strong></TableCell>}
+                {!isMobile && <TableCell><strong>Created</strong></TableCell>}
+                {!isMobile && <TableCell><strong>Cost</strong></TableCell>}
+                <TableCell align="center"><strong>Actions</strong></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredOrders.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                    <Typography color="text.secondary">
+                      No work orders found
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredOrders.map((order) => (
+                  <TableRow 
+                    key={order.id} 
+                    hover
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/work-orders/${order.id}`)}
+                  >
+                    <TableCell>#{order.id}</TableCell>
+                    <TableCell>{order.device?.customer?.name || 'N/A'}</TableCell>
+                    <TableCell>
+                      {order.device?.brand} {order.device?.model}
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
+                        {order.issue_description?.substring(0, 50)}
+                        {order.issue_description?.length > 50 ? '...' : ''}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={formatStatus(order.status)}
+                        color={getStatusColor(order.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    {!isMobile && (
+                      <TableCell>
+                        <Chip
+                          label={order.priority || 'medium'}
+                          color={getPriorityColor(order.priority)}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                    )}
+                    {!isMobile && (
+                      <TableCell>
+                        {new Date(order.created_at).toLocaleDateString()}
+                      </TableCell>
+                    )}
+                    {!isMobile && (
+                      <TableCell>
+                        {order.estimated_cost ? `$${order.estimated_cost}` : '-'}
+                      </TableCell>
+                    )}
+                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                      <IconButton
+                        size="small"
+                        onClick={() => navigate(`/work-orders/${order.id}`)}
+                      >
+                        <Visibility fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        onClick={() => openUpdateDialog(order)}
+                      >
+                        <Edit fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
+
+      {/* Update Status Dialog */}
+      <Dialog 
+        open={openStatusDialog} 
+        onClose={() => setOpenStatusDialog(false)} 
+        maxWidth="sm" 
+        fullWidth
+      >
+        <DialogTitle>Update Work Order Status</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Order #{selectedOrder?.id} - {selectedOrder?.device?.brand} {selectedOrder?.device?.model}
+          </Typography>
+
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={newStatus}
+              onChange={(e) => setNewStatus(e.target.value)}
+              label="Status"
+            >
+              <MenuItem value="pending">Pending</MenuItem>
+              <MenuItem value="in_progress">In Progress</MenuItem>
+              <MenuItem value="waiting_for_parts">Waiting for Parts</MenuItem>
+              <MenuItem value="completed">Completed</MenuItem>
+              <MenuItem value="cancelled">Cancelled</MenuItem>
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            label="Technician Notes"
+            value={technicianNotes}
+            onChange={(e) => setTechnicianNotes(e.target.value)}
+            margin="normal"
+            placeholder="Add notes about the repair status..."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenStatusDialog(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleUpdateStatus}
+            disabled={!newStatus}
+          >
+            Update Status
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
+  );
+};
+
+export default WorkOrders;

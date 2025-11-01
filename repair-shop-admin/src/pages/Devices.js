@@ -1,316 +1,246 @@
 import React, { useState, useEffect } from 'react';
-import { deviceAPI, customerAPI } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import {
+  Container, Typography, Box, Card, CardContent, Button,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Paper, Chip, IconButton, TextField, InputAdornment, MenuItem,
+  Skeleton, useTheme, useMediaQuery, Alert, Grid,
+} from '@mui/material';
+import {
+  Search, Refresh, Visibility, Delete, Smartphone, Laptop, Tablet,
+} from '@mui/icons-material';
+import { adminAPI } from '../services/api';
 
 const Devices = () => {
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [devices, setDevices] = useState([]);
-  const [customers, setCustomers] = useState([]);
+  const [filteredDevices, setFilteredDevices] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({
-    device_type: '',
-    brand: '',
-    model: '',
-    serial_number: '',
-    customer_id: '',
-  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchData();
+    fetchDevices();
   }, []);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    filterDevices();
+  }, [devices, searchQuery, typeFilter]);
+
+  const fetchDevices = async () => {
     try {
       setLoading(true);
-      const [devicesRes, customersRes] = await Promise.all([
-        deviceAPI.getAll(),
-        customerAPI.getAll(),
-      ]);
-      setDevices(devicesRes.data);
-      setCustomers(customersRes.data);
       setError('');
+      const response = await adminAPI.getAllDevices();
+      setDevices(response.data);
     } catch (err) {
-      setError('Failed to load data. Please check if the API is running.');
-      console.error('Error fetching data:', err);
+      console.error('Error fetching devices:', err);
+      setError('Failed to load devices');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const filterDevices = () => {
+    let filtered = devices;
+
+    // Filter by type
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter(d => d.device_type === typeFilter);
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      filtered = filtered.filter(d =>
+        d.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        d.model?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        d.serial_number?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    setFilteredDevices(filtered);
+  };
+
+  const handleDeleteDevice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this device?')) return;
+    
     try {
-      const submitData = {
-        ...formData,
-        customer_id: parseInt(formData.customer_id),
-      };
-
-      if (editingId) {
-        await deviceAPI.update(editingId, submitData);
-      } else {
-        await deviceAPI.create(submitData);
-      }
-      setFormData({
-        device_type: '',
-        brand: '',
-        model: '',
-        serial_number: '',
-        customer_id: '',
-      });
-      setShowForm(false);
-      setEditingId(null);
-      fetchData();
+      await adminAPI.deleteDevice(id);
+      fetchDevices();
     } catch (err) {
-      setError('Failed to save device');
-      console.error('Error saving device:', err);
+      setError(err.response?.data?.detail || 'Failed to delete device');
     }
   };
 
-  const handleEdit = (device) => {
-    setFormData({
-      device_type: device.device_type,
-      brand: device.brand,
-      model: device.model,
-      serial_number: device.serial_number,
-      customer_id: device.customer_id.toString(),
-    });
-    setEditingId(device.id);
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this device?')) {
-      try {
-        await deviceAPI.delete(id);
-        fetchData();
-      } catch (err) {
-        setError('Failed to delete device');
-        console.error('Error deleting device:', err);
-      }
+  const getDeviceIcon = (type) => {
+    switch (type?.toLowerCase()) {
+      case 'phone': return <Smartphone />;
+      case 'laptop': return <Laptop />;
+      case 'tablet': return <Tablet />;
+      default: return <Smartphone />;
     }
   };
 
-  const handleCancel = () => {
-    setFormData({
-      device_type: '',
-      brand: '',
-      model: '',
-      serial_number: '',
-      customer_id: '',
-    });
-    setShowForm(false);
-    setEditingId(null);
-  };
-
-  const getCustomerName = (customerId) => {
-    const customer = customers.find((c) => c.id === customerId);
-    return customer ? customer.name : 'Unknown';
+  const getDeviceTypeColor = (type) => {
+    switch (type?.toLowerCase()) {
+      case 'phone': return 'primary';
+      case 'laptop': return 'secondary';
+      case 'tablet': return 'success';
+      default: return 'default';
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-xl text-gray-600">Loading devices...</div>
-      </div>
+      <Container maxWidth="xl" sx={{ mt: 4, px: 3 }}>
+        <Skeleton variant="text" width="40%" height={40} sx={{ mb: 3 }} />
+        <Skeleton variant="rounded" height={400} />
+      </Container>
     );
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Devices</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-        >
-          + Add Device
-        </button>
-      </div>
+    <Container maxWidth="xl" sx={{ mt: isMobile ? 2 : 4, mb: 4, px: isMobile ? 1.5 : 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant={isMobile ? 'h5' : 'h4'} fontWeight="600">
+            Devices
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {filteredDevices.length} total devices
+          </Typography>
+        </Box>
+        <IconButton onClick={fetchDevices}>
+          <Refresh />
+        </IconButton>
+      </Box>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
           {error}
-        </div>
+        </Alert>
       )}
 
-      {/* Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">
-              {editingId ? 'Edit Device' : 'Add New Device'}
-            </h2>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Customer *
-                </label>
-                <select
-                  required
-                  value={formData.customer_id}
-                  onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                >
-                  <option value="">Select a customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Device Type *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.device_type}
-                  onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="Laptop, Phone, Tablet, etc."
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Brand *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.brand}
-                  onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="Apple, Dell, HP, etc."
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Model *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.model}
-                  onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="MacBook Pro, XPS 15, etc."
-                />
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Serial Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.serial_number}
-                  onChange={(e) => setFormData({ ...formData, serial_number: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="Optional"
-                />
-              </div>
-
-              <div className="flex space-x-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-                >
-                  {editingId ? 'Update' : 'Create'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Filters */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={8}>
+              <TextField
+                fullWidth
+                placeholder="Search by brand, model, or serial number..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <TextField
+                select
+                fullWidth
+                label="Filter by Type"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+              >
+                <MenuItem value="all">All Types</MenuItem>
+                <MenuItem value="phone">Phones</MenuItem>
+                <MenuItem value="laptop">Laptops</MenuItem>
+                <MenuItem value="tablet">Tablets</MenuItem>
+              </TextField>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
 
       {/* Devices Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Customer
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Device Type
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Brand
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Model
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Serial Number
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {devices.length === 0 ? (
-              <tr>
-                <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
-                  No devices yet. Click "Add Device" to get started.
-                </td>
-              </tr>
-            ) : (
-              devices.map((device) => (
-                <tr key={device.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {getCustomerName(device.customer_id)}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{device.device_type}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{device.brand}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{device.model}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">
-                      {device.serial_number || 'N/A'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => handleEdit(device)}
-                      className="text-green-600 hover:text-green-900 mr-4"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(device.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <Card>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell><strong>ID</strong></TableCell>
+                <TableCell><strong>Type</strong></TableCell>
+                <TableCell><strong>Device</strong></TableCell>
+                <TableCell><strong>Serial Number</strong></TableCell>
+                <TableCell><strong>Owner</strong></TableCell>
+                {!isMobile && <TableCell><strong>Added</strong></TableCell>}
+                <TableCell align="center"><strong>Actions</strong></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredDevices.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                    <Typography color="text.secondary">
+                      No devices found
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredDevices.map((device) => (
+                  <TableRow key={device.id} hover>
+                    <TableCell>{device.id}</TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {getDeviceIcon(device.device_type)}
+                        <Chip
+                          label={device.device_type}
+                          color={getDeviceTypeColor(device.device_type)}
+                          size="small"
+                          sx={{ textTransform: 'capitalize' }}
+                        />
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight="600">
+                        {device.brand} {device.model}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" fontFamily="monospace">
+                        {device.serial_number || '-'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{device.customer?.name || 'N/A'}</TableCell>
+                    {!isMobile && (
+                      <TableCell>
+                        {new Date(device.created_at).toLocaleDateString()}
+                      </TableCell>
+                    )}
+                    <TableCell align="center">
+                      <IconButton
+                        size="small"
+                        onClick={() => navigate(`/customers/${device.customer_id}`)}
+                      >
+                        <Visibility fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => handleDeleteDevice(device.id)}
+                      >
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
+    </Container>
   );
 };
 

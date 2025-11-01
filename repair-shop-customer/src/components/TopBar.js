@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AppBar, Toolbar, Box, IconButton, Avatar, Menu, MenuItem,
-  Divider, ListItemIcon, Typography, Badge, useTheme,
+  Divider, ListItemIcon, Typography, useTheme,
   useMediaQuery,
 } from '@mui/material';
 import {
-  Person, Logout, Settings, CardGiftcard, Notifications,
+  Person, Logout, Settings, CardGiftcard,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import NotificationDropdown from './NotificationDropdown';  // Add this import
 
 const TopBar = () => {
   const { user, logout } = useAuth();
@@ -65,12 +66,8 @@ const TopBar = () => {
           </Typography>
         </Box>
 
-        {/* Notifications */}
-        <IconButton sx={{ color: 'white', mr: 1 }}>
-          <Badge badgeContent={3} color="error">
-            <Notifications />
-          </Badge>
-        </IconButton>
+        {/* Notifications - REPLACED */}
+        <NotificationDropdown />
 
         {/* Account Menu */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

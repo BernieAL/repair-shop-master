@@ -1,124 +1,345 @@
 import React, { useState, useEffect } from 'react';
-import { customerAPI, deviceAPI, workOrderAPI } from '../services/api';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import {
+  Container, Typography, Box, Grid, Card, CardContent, Button,
+  Skeleton, useTheme, useMediaQuery, IconButton, Chip,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Paper, LinearProgress,
+} from '@mui/material';
+import {
+  People, Devices, Build, CheckCircle, Warning, TrendingUp,
+  Refresh as RefreshIcon, ArrowForward,
+} from '@mui/icons-material';
+import { adminAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
-const Dashboard = () => {
+const AdminDashboard = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [stats, setStats] = useState({
-    customers: 0,
-    devices: 0,
-    workOrders: 0,
+    totalCustomers: 0,
+    totalDevices: 0,
+    activeWorkOrders: 0,
+    completedToday: 0,
+    pendingOrders: 0,
+    revenue: 0,
   });
+  const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const [customers, devices, workOrders] = await Promise.all([
-          customerAPI.getAll(),
-          deviceAPI.getAll(),
-          workOrderAPI.getAll(),
-        ]);
-        
-        setStats({
-          customers: customers.data.length,
-          devices: devices.data.length,
-          workOrders: workOrders.data.length,
-        });
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchStats();
+    fetchDashboardData();
   }, []);
+
+  const fetchDashboardData = async (isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+
+      const [customersRes, devicesRes, workOrdersRes] = await Promise.all([
+        adminAPI.getAllCustomers(),
+        adminAPI.getAllDevices(),
+        adminAPI.getAllWorkOrders(),
+      ]);
+
+      const customers = customersRes.data;
+      const devices = devicesRes.data;
+      const workOrders = workOrdersRes.data;
+
+      // Calculate stats
+      const activeOrders = workOrders.filter(
+        o => o.status !== 'completed' && o.status !== 'cancelled'
+      );
+      const pendingOrders = workOrders.filter(o => o.status === 'pending');
+      const completedToday = workOrders.filter(o => {
+        if (!o.completed_at) return false;
+        const today = new Date().toDateString();
+        return new Date(o.completed_at).toDateString() === today;
+      });
+
+      const totalRevenue = workOrders
+        .filter(o => o.status === 'completed' && o.actual_cost)
+        .reduce((sum, o) => sum + parseFloat(o.actual_cost || 0), 0);
+
+      setStats({
+        totalCustomers: customers.length,
+        totalDevices: devices.length,
+        activeWorkOrders: activeOrders.length,
+        completedToday: completedToday.length,
+        pendingOrders: pendingOrders.length,
+        revenue: totalRevenue.toFixed(2),
+      });
+
+      // Get 5 most recent orders
+      const sorted = workOrders
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 5);
+      setRecentOrders(sorted);
+
+      if (isRefresh && navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'pending': return 'warning';
+      case 'in_progress': return 'info';
+      case 'completed': return 'success';
+      case 'cancelled': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const formatStatus = (status) => {
+    return status?.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ') || 'Unknown';
+  };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-xl text-gray-600">Loading...</div>
-      </div>
+      <Container maxWidth="xl" sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 2 : 3 }}>
+        <Skeleton variant="text" width="60%" height={40} sx={{ mb: 3 }} />
+        <Grid container spacing={2}>
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <Grid item xs={12} sm={6} md={4} lg={2} key={i}>
+              <Skeleton variant="rounded" height={120} />
+            </Grid>
+          ))}
+        </Grid>
+      </Container>
     );
   }
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Dashboard</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Customers Card */}
-        <Link to="/customers" className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Total Customers</p>
-              <p className="text-3xl font-bold text-blue-600">{stats.customers}</p>
-            </div>
-            <div className="bg-blue-100 rounded-full p-3">
-              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            </div>
-          </div>
-        </Link>
+    <Container 
+      maxWidth="xl" 
+      sx={{ 
+        mt: isMobile ? 1 : 4, 
+        mb: isMobile ? 10 : 4,
+        px: isMobile ? 1.5 : 3,
+      }}
+    >
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant={isMobile ? 'h5' : 'h4'} fontWeight="700">
+            Admin Dashboard
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Welcome back, {user?.name}! 👋
+          </Typography>
+        </Box>
+        <IconButton onClick={() => fetchDashboardData(true)} disabled={refreshing}>
+          <RefreshIcon sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+        </IconButton>
+      </Box>
 
-        {/* Devices Card */}
-        <Link to="/devices" className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Total Devices</p>
-              <p className="text-3xl font-bold text-green-600">{stats.devices}</p>
-            </div>
-            <div className="bg-green-100 rounded-full p-3">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-          </div>
-        </Link>
+      {/* Stats Cards */}
+      <Grid container spacing={isMobile ? 1.5 : 2} sx={{ mb: 4 }}>
+        <Grid item xs={6} sm={6} md={4} lg={2}>
+          <Card
+            onClick={() => navigate('/customers')}
+            sx={{
+              cursor: 'pointer',
+              transition: 'transform 0.2s',
+              '&:hover': { transform: 'translateY(-4px)' },
+            }}
+          >
+            <CardContent sx={{ textAlign: 'center', p: isMobile ? 2 : 2.5 }}>
+              <People sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
+              <Typography variant="h4" fontWeight="700" color="primary.main">
+                {stats.totalCustomers}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Total Customers
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
 
-        {/* Work Orders Card */}
-        <Link to="/work-orders" className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Active Work Orders</p>
-              <p className="text-3xl font-bold text-purple-600">{stats.workOrders}</p>
-            </div>
-            <div className="bg-purple-100 rounded-full p-3">
-              <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-          </div>
-        </Link>
-      </div>
+        <Grid item xs={6} sm={6} md={4} lg={2}>
+          <Card
+            onClick={() => navigate('/devices')}
+            sx={{
+              cursor: 'pointer',
+              transition: 'transform 0.2s',
+              '&:hover': { transform: 'translateY(-4px)' },
+            }}
+          >
+            <CardContent sx={{ textAlign: 'center', p: isMobile ? 2 : 2.5 }}>
+              <Devices sx={{ fontSize: 40, color: 'secondary.main', mb: 1 }} />
+              <Typography variant="h4" fontWeight="700" color="secondary.main">
+                {stats.totalDevices}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Total Devices
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link
-            to="/customers"
-            className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:bg-blue-100 transition text-center"
+        <Grid item xs={6} sm={6} md={4} lg={2}>
+          <Card
+            onClick={() => navigate('/work-orders')}
+            sx={{
+              cursor: 'pointer',
+              transition: 'transform 0.2s',
+              '&:hover': { transform: 'translateY(-4px)' },
+            }}
           >
-            <p className="text-blue-600 font-medium">+ Add Customer</p>
-          </Link>
-          <Link
-            to="/devices"
-            className="bg-green-50 border border-green-200 rounded-lg p-4 hover:bg-green-100 transition text-center"
-          >
-            <p className="text-green-600 font-medium">+ Add Device</p>
-          </Link>
-          <Link
-            to="/work-orders"
-            className="bg-purple-50 border border-purple-200 rounded-lg p-4 hover:bg-purple-100 transition text-center"
-          >
-            <p className="text-purple-600 font-medium">+ New Work Order</p>
-          </Link>
-        </div>
-      </div>
-    </div>
+            <CardContent sx={{ textAlign: 'center', p: isMobile ? 2 : 2.5 }}>
+              <Build sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
+              <Typography variant="h4" fontWeight="700" color="info.main">
+                {stats.activeWorkOrders}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Active Repairs
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={6} sm={6} md={4} lg={2}>
+          <Card>
+            <CardContent sx={{ textAlign: 'center', p: isMobile ? 2 : 2.5 }}>
+              <Warning sx={{ fontSize: 40, color: 'warning.main', mb: 1 }} />
+              <Typography variant="h4" fontWeight="700" color="warning.main">
+                {stats.pendingOrders}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Pending Orders
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={6} sm={6} md={4} lg={2}>
+          <Card>
+            <CardContent sx={{ textAlign: 'center', p: isMobile ? 2 : 2.5 }}>
+              <CheckCircle sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
+              <Typography variant="h4" fontWeight="700" color="success.main">
+                {stats.completedToday}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Completed Today
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={6} sm={6} md={4} lg={2}>
+          <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+            <CardContent sx={{ textAlign: 'center', p: isMobile ? 2 : 2.5 }}>
+              <TrendingUp sx={{ fontSize: 40, color: 'white', mb: 1 }} />
+              <Typography variant="h4" fontWeight="700" color="white">
+                ${stats.revenue}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.9)' }}>
+                Total Revenue
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Recent Work Orders */}
+      <Card>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6" fontWeight="600">
+              Recent Work Orders
+            </Typography>
+            <Button
+              size="small"
+              endIcon={<ArrowForward />}
+              onClick={() => navigate('/work-orders')}
+            >
+              View All
+            </Button>
+          </Box>
+
+          {recentOrders.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body1" color="text.secondary">
+                No work orders yet
+              </Typography>
+            </Box>
+          ) : (
+            <TableContainer component={Paper} elevation={0}>
+              <Table size={isMobile ? 'small' : 'medium'}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell><strong>Order #</strong></TableCell>
+                    {!isMobile && <TableCell><strong>Customer</strong></TableCell>}
+                    <TableCell><strong>Device</strong></TableCell>
+                    <TableCell><strong>Status</strong></TableCell>
+                    {!isMobile && <TableCell><strong>Created</strong></TableCell>}
+                    <TableCell align="center"><strong>Action</strong></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {recentOrders.map((order) => (
+                    <TableRow 
+                      key={order.id} 
+                      hover
+                      sx={{ cursor: 'pointer' }}
+                      onClick={() => navigate(`/work-orders/${order.id}`)}
+                    >
+                      <TableCell>#{order.id}</TableCell>
+                      {!isMobile && (
+                        <TableCell>
+                          {order.device?.customer?.name || 'N/A'}
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        {order.device?.brand} {order.device?.model}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={formatStatus(order.status)}
+                          color={getStatusColor(order.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      {!isMobile && (
+                        <TableCell>
+                          {new Date(order.created_at).toLocaleDateString()}
+                        </TableCell>
+                      )}
+                      <TableCell align="center">
+                        <Button size="small" variant="outlined">
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </Container>
   );
 };
 
-export default Dashboard;
+export default AdminDashboard;

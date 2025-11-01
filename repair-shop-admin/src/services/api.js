@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Your EC2 API endpoint
-const API_BASE_URL = 'http://3.239.255.82:8000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+console.log('🔗 Admin Portal API URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,31 +10,100 @@ const api = axios.create({
   },
 });
 
-// Customer API calls
-export const customerAPI = {
-  getAll: () => api.get('/customers'),
-  getById: (id) => api.get(`/customers/${id}`),
-  create: (data) => api.post('/customers', data),
-  update: (id, data) => api.put(`/customers/${id}`, data),
-  delete: (id) => api.delete(`/customers/${id}`),
+// Add token to requests automatically
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Handle 401 errors (expired/invalid token)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ==========================================
+// AUTHENTICATION
+// ==========================================
+export const authAPI = {
+  login: (email, password) =>
+    api.post('/api/auth/login', { email, password }),
+  
+  getCurrentUser: () =>
+    api.get('/api/auth/me'),
 };
 
-// Device API calls
-export const deviceAPI = {
-  getAll: () => api.get('/devices'),
-  getById: (id) => api.get(`/devices/${id}`),
-  create: (data) => api.post('/devices', data),
-  update: (id, data) => api.put(`/devices/${id}`, data),
-  delete: (id) => api.delete(`/devices/${id}`),
-};
-
-// Work Order API calls
-export const workOrderAPI = {
-  getAll: () => api.get('/work-orders'),
-  getById: (id) => api.get(`/work-orders/${id}`),
-  create: (data) => api.post('/work-orders', data),
-  update: (id, data) => api.put(`/work-orders/${id}`, data),
-  delete: (id) => api.delete(`/work-orders/${id}`),
+// ==========================================
+// ADMIN ENDPOINTS
+// ==========================================
+export const adminAPI = {
+  // Customer Management
+  getAllCustomers: (role) => 
+    api.get('/api/admin/customers', { params: { role } }),
+  
+  getCustomer: (id) => 
+    api.get(`/api/admin/customers/${id}`),
+  
+  createCustomer: (data) => 
+    api.post('/api/admin/customers', data),
+  
+  updateCustomer: (id, data) => 
+    api.put(`/api/admin/customers/${id}`, data),
+  
+  deleteCustomer: (id) => 
+    api.delete(`/api/admin/customers/${id}`),
+  
+  // Device Management
+  getAllDevices: (customerId) => 
+    api.get('/api/admin/devices', { params: { customer_id: customerId } }),
+  
+  getDevice: (id) => 
+    api.get(`/api/admin/devices/${id}`),
+  
+  createDevice: (data) => 
+    api.post('/api/admin/devices', data),
+  
+  updateDevice: (id, data) => 
+    api.put(`/api/admin/devices/${id}`, data),
+  
+  deleteDevice: (id) => 
+    api.delete(`/api/admin/devices/${id}`),
+  
+  // Work Order Management
+  getAllWorkOrders: (filters) => 
+    api.get('/api/admin/work-orders', { params: filters }), // { customer_id, status }
+  
+  getWorkOrder: (id) => 
+    api.get(`/api/admin/work-orders/${id}`),
+  
+  createWorkOrder: (data) => 
+    api.post('/api/admin/work-orders', data),
+  
+  updateWorkOrder: (id, data) => 
+    api.put(`/api/admin/work-orders/${id}`, data),
+  
+  updateWorkOrderStatus: (id, status, technician_notes) => 
+    api.patch(`/api/admin/work-orders/${id}/status`, null, {
+      params: { status, technician_notes }
+    }),
+  
+  deleteWorkOrder: (id) => 
+    api.delete(`/api/admin/work-orders/${id}`),
 };
 
 export default api;

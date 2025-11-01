@@ -1,271 +1,337 @@
-
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Container, Typography, Box, Card, CardContent, Avatar,
-  Chip, Tabs, Tab, Button, useTheme, useMediaQuery,
-  List, ListItem, ListItemAvatar, ListItemText, Divider,
+  Box,
+  Container,
+  Typography,
+  Paper,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  Avatar,
+  Button,
+  Chip,
+  IconButton,
+  Divider,
 } from '@mui/material';
 import {
-  Build, Message, CheckCircle, FilterList, MarkEmailRead,
+  Message,
+  CheckCircle,
+  Info,
+  ArrowBack,
+  DoneAll,
+  Delete,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 
 const NotificationsPage = () => {
-  const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
-  const [activeTab, setActiveTab] = useState(0);
   const [notifications, setNotifications] = useState([]);
+  const [filter, setFilter] = useState('all'); // 'all', 'unread', 'read'
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchNotifications();
   }, []);
 
   const fetchNotifications = async () => {
-    // Mock data - replace with actual API call
-    const mockNotifications = [
-      {
-        id: 1,
-        type: 'status_change',
-        title: 'Repair Status Updated',
-        message: 'Your iPhone 15 Pro repair is now in progress',
-        repair_id: 1,
-        timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-        read: false,
-      },
-      {
-        id: 2,
-        type: 'tech_note',
-        title: 'New Message from Technician',
-        message: 'Screen replacement completed. Device is now in quality check.',
-        repair_id: 1,
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-        read: false,
-      },
-      {
-        id: 3,
-        type: 'status_change',
-        title: 'Repair Completed',
-        message: 'Your MacBook Pro repair is ready for pickup!',
-        repair_id: 2,
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-        read: true,
-      },
-      {
-        id: 4,
-        type: 'tech_note',
-        title: 'Diagnostic Complete',
-        message: 'We\'ve identified the issue with your device. View details for estimate.',
-        repair_id: 1,
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-        read: true,
-      },
-    ];
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8000/api/customers/notifications/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
-    setNotifications(mockNotifications);
+      if (!response.ok) throw new Error('Failed to fetch');
+      const data = await response.json();
+      setNotifications(data);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+  const markAsRead = async (notificationId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`http://localhost:8000/api/customers/notifications/${notificationId}/read`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      setNotifications(notifications.map(n =>
+        n.id === notificationId ? { ...n, read: true } : n
+      ));
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+  const deleteNotification = async (notificationId, event) => {
+    // Prevent the click from bubbling up to the ListItem
+    event.stopPropagation();
+    
+    if (!window.confirm('Delete this notification?')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`http://localhost:8000/api/customers/notifications/${notificationId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to delete notification');
+
+      // Remove from state
+      setNotifications(notifications.filter(n => n.id !== notificationId));
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+      alert('Failed to delete notification. Please try again.');
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    if (!window.confirm('Are you sure you want to clear all notifications? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+
+      const response = await fetch('http://localhost:8000/api/customers/notifications/', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to clear notifications');
+
+      setNotifications([]);
+    
+    } catch (error) {
+      console.error('Failed to clear notifications:', error);
+      alert('Failed to clear notifications. Please try again.');
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('http://localhost:8000/api/customers/notifications/read-all', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      setNotifications(notifications.map(n => ({ ...n, read: true })));
+    } catch (error) {
+      console.error('Error:', error);
+    }
   };
 
   const handleNotificationClick = (notification) => {
-    if (navigator.vibrate) navigator.vibrate(30);
-    
-    // Mark as read
-    if (!notification.read) {
-      setNotifications(prev => 
-        prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
-      );
-    }
+    markAsRead(notification.id);
 
-    // Navigate to repair
-    if (notification.repair_id) {
-      navigate(`/repair/${notification.repair_id}`);
+    if (notification.work_order_id) {
+      navigate('/my-repairs', {
+        state: {
+          openWorkOrderId: notification.work_order_id,
+          openMessagesTab: notification.type === 'message'
+        }
+      });
+    } else {
+      navigate('/my-repairs');
     }
-  };
-
-  const handleMarkAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
   const getNotificationIcon = (type) => {
     switch (type) {
+      case 'message':
+        return <Message sx={{ color: '#3b82f6' }} />;
       case 'status_change':
-        return <Build sx={{ color: '#007AFF' }} />;
-      case 'tech_note':
-        return <Message sx={{ color: '#34C759' }} />;
+        return <CheckCircle sx={{ color: '#10b981' }} />;
       case 'completed':
-        return <CheckCircle sx={{ color: '#34C759' }} />;
+        return <CheckCircle sx={{ color: '#8b5cf6' }} />;
+      case 'tech_note':
+        return <Info sx={{ color: '#f59e0b' }} />;
       default:
-        return <Build sx={{ color: '#8E8E93' }} />;
+        return <Info sx={{ color: '#6b7280' }} />;
     }
   };
 
-  const getTimeAgo = (timestamp) => {
-    const now = new Date();
-    const past = new Date(timestamp);
-    const diffInSeconds = Math.floor((now - past) / 1000);
-
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
-    return past.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString();
   };
 
   const filteredNotifications = notifications.filter(n => {
-    if (activeTab === 0) return true; // All
-    if (activeTab === 1) return !n.read; // Unread
-    if (activeTab === 2) return n.type === 'status_change'; // Status Updates
-    if (activeTab === 3) return n.type === 'tech_note'; // Messages
+    if (filter === 'unread') return !n.read;
+    if (filter === 'read') return n.read;
     return true;
   });
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <Container
-      maxWidth="md"
-      sx={{
-        mt: isMobile ? 3 : 6,
-        mb: isMobile ? 12 : 6,
-        px: isMobile ? 2 : 3,
-      }}
-    >
+    <Container maxWidth="md" sx={{ py: 4 }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography
-          variant={isMobile ? 'h4' : 'h3'}
-          sx={{
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-            mb: 1,
-          }}
-        >
-          Notifications
-        </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <IconButton onClick={() => navigate(-1)} sx={{ mr: 2 }}>
+            <ArrowBack />
+          </IconButton>
+          <Typography variant="h4" fontWeight="700">
+            Notifications
           </Typography>
+        </Box>
+
+        {/* Actions */}
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Chip
+            label={`All (${notifications.length})`}
+            onClick={() => setFilter('all')}
+            color={filter === 'all' ? 'primary' : 'default'}
+            variant={filter === 'all' ? 'filled' : 'outlined'}
+          />
+          <Chip
+            label={`Unread (${unreadCount})`}
+            onClick={() => setFilter('unread')}
+            color={filter === 'unread' ? 'primary' : 'default'}
+            variant={filter === 'unread' ? 'filled' : 'outlined'}
+          />
+          <Chip
+            label={`Read (${notifications.length - unreadCount})`}
+            onClick={() => setFilter('read')}
+            color={filter === 'read' ? 'primary' : 'default'}
+            variant={filter === 'read' ? 'filled' : 'outlined'}
+          />
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          {/* Action Buttons */}
           {unreadCount > 0 && (
             <Button
+              startIcon={<DoneAll />}
+              onClick={markAllAsRead}
               size="small"
-              onClick={handleMarkAllRead}
-              startIcon={<MarkEmailRead fontSize="small" />}
-              sx={{
-                textTransform: 'none',
-                color: '#007AFF',
-              }}
+              variant="outlined"
             >
-              Mark all read
+              Mark All Read
+            </Button>
+          )}
+
+          {notifications.length > 0 && (
+            <Button
+              startIcon={<Delete />}
+              onClick={clearAllNotifications}
+              size="small"
+              variant="outlined"
+              color="error"
+            >
+              Clear All
             </Button>
           )}
         </Box>
       </Box>
-
-      {/* Tabs */}
-      <Card sx={{ mb: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider' }} elevation={0}>
-        <Tabs
-          value={activeTab}
-          onChange={(e, newValue) => setActiveTab(newValue)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            '& .MuiTab-root': {
-              textTransform: 'none',
-              fontWeight: 600,
-              minHeight: 48,
-            },
-          }}
-        >
-          <Tab label="All" />
-          <Tab label={`Unread ${unreadCount > 0 ? `(${unreadCount})` : ''}`} />
-          <Tab label="Status Updates" />
-          <Tab label="Messages" />
-        </Tabs>
-      </Card>
-
       {/* Notifications List */}
-      {filteredNotifications.length === 0 ? (
-        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }} elevation={0}>
-          <CardContent sx={{ p: 6, textAlign: 'center' }}>
-            <Box sx={{ fontSize: 64, mb: 2 }}>🔔</Box>
-            <Typography variant="h6" fontWeight={600} gutterBottom>
-              No notifications
+      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+        {filteredNotifications.length === 0 ? (
+          <Box sx={{ py: 8, textAlign: 'center' }}>
+            <Info sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+            <Typography variant="h6" color="text.secondary">
+              {filter === 'unread' ? 'No unread notifications' :
+                filter === 'read' ? 'No read notifications' :
+                  'No notifications yet'}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              You're all caught up!
-            </Typography>
-          </CardContent>
-        </Card>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {filteredNotifications.map((notification) => (
-            <Card
-              key={notification.id}
-              onClick={() => handleNotificationClick(notification)}
-              sx={{
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: notification.read ? 'divider' : '#007AFF',
-                bgcolor: notification.read ? 'transparent' : '#007AFF05',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                '&:hover': {
-                  borderColor: '#007AFF',
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-                },
-              }}
-              elevation={0}
-            >
-              <CardContent sx={{ p: 2.5 }}>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Avatar
-                    sx={{
-                      bgcolor: 'transparent',
-                      border: '2px solid',
-                      borderColor: notification.read ? 'divider' : '#007AFF',
-                      width: 48,
-                      height: 48,
-                    }}
-                  >
-                    {getNotificationIcon(notification.type)}
-                  </Avatar>
-                  <Box sx={{ flex: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.5 }}>
-                      <Typography
-                        variant="body1"
-                        fontWeight={notification.read ? 500 : 600}
-                        sx={{ flex: 1, pr: 1 }}
-                      >
-                        {notification.title}
-                      </Typography>
-                      {!notification.read && (
-                        <Box
-                          sx={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: '50%',
-                            bgcolor: '#007AFF',
-                            flexShrink: 0,
-                            mt: 0.5,
-                          }}
-                        />
-                      )}
-                    </Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      {notification.message}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {getTimeAgo(notification.timestamp)}
-                    </Typography>
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
-          ))}
-        </Box>
-      )}
+          </Box>
+        ) : (
+          <List sx={{ p: 0 }}>
+            {filteredNotifications.map((notification, index) => (
+              <React.Fragment key={notification.id}>
+                <ListItem
+                  button
+                  onClick={() => handleNotificationClick(notification)}
+                  sx={{
+                    bgcolor: notification.read ? 'transparent' : 'action.hover',
+                    '&:hover': {
+                      bgcolor: notification.read ? 'action.hover' : 'action.selected',
+                    },
+                    py: 2,
+                  }}
+                  secondaryAction={
+                    <IconButton 
+                      edge="end" 
+                      aria-label="delete"
+                      onClick={(e) => deleteNotification(notification.id, e)}
+                      sx={{
+                        '&:hover': {
+                          color: 'error.main',
+                        },
+                      }}
+                    >
+                      <Delete />
+                    </IconButton>
+                  }
+                >
+                  <ListItemAvatar>
+                    <Avatar
+                      sx={{
+                        bgcolor: notification.read ? 'grey.200' : 'primary.light',
+                        width: 48,
+                        height: 48,
+                      }}
+                    >
+                      {getNotificationIcon(notification.type)}
+                    </Avatar>
+                  </ListItemAvatar>
+
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography
+                          variant="subtitle1"
+                          fontWeight={notification.read ? 400 : 600}
+                        >
+                          {notification.title}
+                        </Typography>
+                        {!notification.read && (
+                          <Box
+                            sx={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              bgcolor: 'primary.main',
+                            }}
+                          />
+                        )}
+                      </Box>
+                    }
+                    secondary={
+                      <>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                          {notification.message}
+                        </Typography>
+                        <Typography variant="caption" color="text.disabled" sx={{ mt: 1, display: 'block' }}>
+                          {formatTime(notification.created_at)}
+                        </Typography>
+                      </>
+                    }
+                  />
+                </ListItem>
+                {index < filteredNotifications.length - 1 && <Divider />}
+              </React.Fragment>
+            ))}
+          </List>
+        )}
+      </Paper>
     </Container>
   );
 };

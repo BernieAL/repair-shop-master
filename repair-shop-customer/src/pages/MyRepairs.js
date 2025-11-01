@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect} from 'react';
+import { useNavigate, useLocation  } from 'react-router-dom';
 import MessageThread from '../components/MessageThread';
+
 
 const MyRepairs = () => {
   const [repairs, setRepairs] = useState([]);
@@ -8,6 +9,7 @@ const MyRepairs = () => {
   const [selectedRepair, setSelectedRepair] = useState(null);
   const [activeTab, setActiveTab] = useState('details'); // 'details' or 'messages'
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     fetchRepairs();
@@ -43,6 +45,19 @@ const MyRepairs = () => {
       setLoading(false);
     }
   };
+
+//useEffect to handle navigation from notifications
+useEffect(() => {
+  if (location.state?.openWorkOrderId && repairs.length > 0) {
+    const repair = repairs.find(r => r.id === location.state.openWorkOrderId);
+    if (repair) {
+      setSelectedRepair(repair);
+      setActiveTab(location.state.openMessagesTab ? 'messages' : 'details');
+    }
+    // Clear the state after opening
+    window.history.replaceState({}, document.title);
+  }
+}, [location.state, repairs]);
 
   const getStatusColor = (status) => {
     const colors = {

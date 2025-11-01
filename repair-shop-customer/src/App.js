@@ -16,6 +16,7 @@ import MyRepairs from './pages/MyRepairs';
 import NewRequest from './pages/NewRequest';
 import Profile from './pages/Profile';
 import Account from './pages/Account';
+import NotificationsPage from './pages/NotificationsPage';
 import Referrals from './pages/Referrals';
 import TopBar from './components/TopBar';
 import FAQ from './pages/FAQ';
@@ -90,8 +91,9 @@ function App() {
                       <Route path="/my-repairs" element={<MyRepairs />} />
                       <Route path="/new-request" element={<NewRequest />} />
                       <Route path="/profile" element={<Profile />} />
-                      <Route path="/account" element={<Account />} />  {/* NEW */}
-                      <Route path="/referrals" element={<Referrals />} />  {/* NEW */}
+                      <Route path="/account" element={<Account />} />  
+                      <Route path="/referrals" element={<Referrals />} />  
+                      <Route path="/notifications" element={<NotificationsPage />} />
                       <Route path="/faq" element={<FAQ />} />
                     </Routes>
                   </Box>
